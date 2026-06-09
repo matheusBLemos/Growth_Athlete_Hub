@@ -1,18 +1,21 @@
 package handler_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/gofiber/fiber/v2"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 )
 
 func TestActivityHandler_RegisterActivity_Success(t *testing.T) {
 	mocks := newHandlerMocks()
-	h := handler.NewActivityHandler(mocks.registerActivity)
+	app := fiber.New()
+	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
 
 	body := `{
 		"user_id": "user-1",
@@ -22,43 +25,51 @@ func TestActivityHandler_RegisterActivity_Success(t *testing.T) {
 		"avg_heart_rate": 150
 	}`
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
 
-	h.Register(w, req)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
 
-	var resp map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	var out map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["id"] == "" {
+	if out["id"] == "" {
 		t.Fatal("expected non-empty ID in response")
 	}
 }
 
 func TestActivityHandler_RegisterActivity_InvalidBody(t *testing.T) {
 	mocks := newHandlerMocks()
-	h := handler.NewActivityHandler(mocks.registerActivity)
+	app := fiber.New()
+	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", bytes.NewBufferString(`{invalid`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", strings.NewReader(`{invalid`))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
 
-	h.Register(w, req)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", w.Code)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
 func TestActivityHandler_RegisterActivity_ValidationError(t *testing.T) {
 	mocks := newHandlerMocks()
-	h := handler.NewActivityHandler(mocks.registerActivity)
+	app := fiber.New()
+	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
 
 	body := `{
 		"user_id": "user-1",
@@ -68,13 +79,16 @@ func TestActivityHandler_RegisterActivity_ValidationError(t *testing.T) {
 		"avg_heart_rate": 150
 	}`
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
 
-	h.Register(w, req)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
 
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", resp.StatusCode)
 	}
 }

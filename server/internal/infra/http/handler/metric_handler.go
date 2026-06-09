@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/entity"
@@ -30,18 +30,15 @@ type recordMetricRequest struct {
 	Date       string  `json:"date"`
 }
 
-func (h *MetricHandler) Record(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+func (h *MetricHandler) Record(c *fiber.Ctx) error {
 	var req recordMetricRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid date format, use RFC3339")
-		return
+		return writeError(c, fiber.StatusBadRequest, "invalid date format, use RFC3339")
 	}
 
 	input := usecase.RecordMetricInput{
@@ -51,42 +48,37 @@ func (h *MetricHandler) Record(w http.ResponseWriter, r *http.Request) {
 		Date:       date,
 	}
 
-	output, err := h.recordMetric.Execute(r.Context(), input)
+	output, err := h.recordMetric.Execute(c.Context(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidMetricType) ||
 			errors.Is(err, entity.ErrMetricOutOfRange) ||
 			errors.Is(err, entity.ErrEmptyUserID) ||
 			errors.Is(err, entity.ErrEmptyDate) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
+			return writeError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
+		return writeError(c, fiber.StatusInternalServerError, "internal error")
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]string{"id": output.ID})
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": output.ID})
 }
 
-func (h *MetricHandler) Query(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	metricType := r.URL.Query().Get("metric_type")
-	fromStr := r.URL.Query().Get("from")
-	toStr := r.URL.Query().Get("to")
+func (h *MetricHandler) Query(c *fiber.Ctx) error {
+	userID := c.Query("user_id")
+	metricType := c.Query("metric_type")
+	fromStr := c.Query("from")
+	toStr := c.Query("to")
 
 	if userID == "" || metricType == "" || fromStr == "" || toStr == "" {
-		writeError(w, http.StatusBadRequest, "missing required query params: user_id, metric_type, from, to")
-		return
+		return writeError(c, fiber.StatusBadRequest, "missing required query params: user_id, metric_type, from, to")
 	}
 
 	from, err := time.Parse(time.RFC3339, fromStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid 'from' date format")
-		return
+		return writeError(c, fiber.StatusBadRequest, "invalid 'from' date format")
 	}
 	to, err := time.Parse(time.RFC3339, toStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid 'to' date format")
-		return
+		return writeError(c, fiber.StatusBadRequest, "invalid 'to' date format")
 	}
 
 	input := usecase.QueryMetricsInput{
@@ -96,17 +88,15 @@ func (h *MetricHandler) Query(w http.ResponseWriter, r *http.Request) {
 		To:         to,
 	}
 
-	output, err := h.queryMetrics.Execute(r.Context(), input)
+	output, err := h.queryMetrics.Execute(c.Context(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidMetricType) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
+			return writeError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
+		return writeError(c, fiber.StatusInternalServerError, "internal error")
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"metrics": output.Metrics,
 		"count":   len(output.Metrics),
 	})

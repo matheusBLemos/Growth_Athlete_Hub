@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/entity"
@@ -28,18 +28,15 @@ type registerActivityRequest struct {
 	ExternalID      string  `json:"external_id,omitempty"`
 }
 
-func (h *ActivityHandler) Register(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+func (h *ActivityHandler) Register(c *fiber.Ctx) error {
 	var req registerActivityRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	date, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid date format, use RFC3339")
-		return
+		return writeError(c, fiber.StatusBadRequest, "invalid date format, use RFC3339")
 	}
 
 	input := usecase.RegisterActivityInput{
@@ -51,23 +48,20 @@ func (h *ActivityHandler) Register(w http.ResponseWriter, r *http.Request) {
 		ExternalID:   req.ExternalID,
 	}
 
-	output, err := h.registerActivity.Execute(r.Context(), input)
+	output, err := h.registerActivity.Execute(c.Context(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidActivityType) ||
 			errors.Is(err, entity.ErrInvalidDuration) ||
 			errors.Is(err, entity.ErrHROutOfRange) ||
 			errors.Is(err, entity.ErrActivityDateFuture) ||
 			errors.Is(err, entity.ErrEmptyUserID) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
+			return writeError(c, fiber.StatusUnprocessableEntity, err.Error())
 		}
 		if errors.Is(err, usecase.ErrDuplicateActivity) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
+			return writeError(c, fiber.StatusConflict, err.Error())
 		}
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
+		return writeError(c, fiber.StatusInternalServerError, "internal error")
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]string{"id": output.ID})
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": output.ID})
 }
