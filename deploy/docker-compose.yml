@@ -154,6 +154,40 @@ services:
       - /proc/:/host/proc/:ro
       - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
 
+  # ---------------------------------------------------------------------------
+  # Stack de observabilidade OPEN SOURCE (alternativa local ao Datadog).
+  # `grafana/otel-lgtm` empacota numa caixa só: OTel Collector (OTLP :4317/:4318)
+  # + Loki (logs) + Tempo (traces) + Prometheus (métricas) + Grafana (UI :3000).
+  #
+  # Profile "dev-observability" (não sobe por padrão). Para usar:
+  #   OBSERVABILITY_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=lgtm:4317 \
+  #     docker compose -f deploy/docker-compose.yml --profile dev-observability up -d --build
+  # Depois abra o Grafana em http://localhost:3000 (login admin / admin).
+  # ---------------------------------------------------------------------------
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: gah-lgtm
+    profiles: ["dev-observability"]
+    ports:
+      - "3000:3000" # Grafana UI
+    # OTLP fica acessível na rede do compose como lgtm:4317 (gRPC) / lgtm:4318.
+
+  # Grafana Alloy: lê o stdout dos containers gah-* e envia para o Loki do lgtm,
+  # para que os logs apareçam no mesmo Grafana (junto de traces e métricas).
+  alloy:
+    image: grafana/alloy:latest
+    container_name: gah-alloy
+    profiles: ["dev-observability"]
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+    volumes:
+      - ./observability/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - lgtm
+
 volumes:
   gah_pgdata:
   gah_rabbitmqdata:
