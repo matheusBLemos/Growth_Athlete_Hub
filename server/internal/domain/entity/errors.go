@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrEmptyName          = errors.New("name must not be empty")
 	ErrInvalidEmail       = errors.New("invalid email address")
+	ErrEmptyPasswordHash  = errors.New("password hash must not be empty")
 	ErrBirthDateFuture    = errors.New("birth date must be in the past")
 	ErrEmptyUserID        = errors.New("user ID must not be empty")
 	ErrInvalidDuration    = errors.New("duration must be greater than zero")

@@ -20,7 +20,6 @@ func NewActivityHandler(register *usecase.RegisterActivity) *ActivityHandler {
 }
 
 type registerActivityRequest struct {
-	UserID          string  `json:"user_id"`
 	ActivityType    string  `json:"activity_type"`
 	Date            string  `json:"date"`
 	DurationMinutes float64 `json:"duration_minutes"`
@@ -29,6 +28,8 @@ type registerActivityRequest struct {
 }
 
 func (h *ActivityHandler) Register(c *fiber.Ctx) error {
+	userID := userIDFromCtx(c)
+
 	var req registerActivityRequest
 	if err := c.BodyParser(&req); err != nil {
 		return writeError(c, fiber.StatusBadRequest, "invalid request body")
@@ -40,7 +41,7 @@ func (h *ActivityHandler) Register(c *fiber.Ctx) error {
 	}
 
 	input := usecase.RegisterActivityInput{
-		UserID:       req.UserID,
+		UserID:       userID,
 		ActivityType: req.ActivityType,
 		Date:         date,
 		Duration:     time.Duration(req.DurationMinutes * float64(time.Minute)),

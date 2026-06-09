@@ -2,9 +2,13 @@ package handler_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/middleware"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/entity"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/valueobject"
@@ -15,6 +19,8 @@ type handlerMocks struct {
 	recordMetric     *usecase.RecordMetric
 	queryMetrics     *usecase.QueryMetrics
 	generateInsights *usecase.GenerateInsights
+	registerUser     *usecase.RegisterUser
+	loginUser        *usecase.LoginUser
 }
 
 func newHandlerMocks() handlerMocks {
@@ -24,14 +30,83 @@ func newHandlerMocks() handlerMocks {
 	}
 	metRepo := &inMemoryMetricRepo{}
 	insRepo := &inMemoryInsightRepo{}
+	userRepo := &inMemoryUserRepo{
+		byID:    make(map[string]*entity.User),
+		byEmail: make(map[string]*entity.User),
+	}
 	pub := &noopPublisher{}
 	eval := &noopEvaluator{}
+	hasher := &fakeHasher{}
+	issuer := &fakeIssuer{}
 
 	return handlerMocks{
 		registerActivity: usecase.NewRegisterActivity(actRepo, pub),
 		recordMetric:     usecase.NewRecordMetric(metRepo, pub),
 		queryMetrics:     usecase.NewQueryMetrics(metRepo),
 		generateInsights: usecase.NewGenerateInsights(metRepo, insRepo, eval),
+		registerUser:     usecase.NewRegisterUser(userRepo, hasher, pub),
+		loginUser:        usecase.NewLoginUser(userRepo, hasher, issuer),
+	}
+}
+
+// --- In-memory user repo + fake auth deps for handler tests ---
+
+type inMemoryUserRepo struct {
+	byID    map[string]*entity.User
+	byEmail map[string]*entity.User
+}
+
+func (r *inMemoryUserRepo) Save(_ context.Context, u *entity.User) error {
+	r.byID[u.ID] = u
+	r.byEmail[u.Email] = u
+	return nil
+}
+
+func (r *inMemoryUserRepo) FindByID(_ context.Context, id string) (*entity.User, error) {
+	return r.byID[id], nil
+}
+
+func (r *inMemoryUserRepo) FindByEmail(_ context.Context, email string) (*entity.User, error) {
+	return r.byEmail[email], nil
+}
+
+var _ port.UserRepository = (*inMemoryUserRepo)(nil)
+
+type fakeHasher struct{}
+
+func (fakeHasher) Hash(plain string) (string, error) { return "hashed:" + plain, nil }
+
+func (fakeHasher) Compare(hash, plain string) error {
+	if hash != "hashed:"+plain {
+		return errInvalid
+	}
+	return nil
+}
+
+var _ port.PasswordHasher = (*fakeHasher)(nil)
+
+type fakeIssuer struct{}
+
+func (fakeIssuer) Issue(userID string) (string, error) { return "token:" + userID, nil }
+
+func (fakeIssuer) Parse(token string) (string, error) {
+	const prefix = "token:"
+	if len(token) <= len(prefix) || token[:len(prefix)] != prefix {
+		return "", errInvalid
+	}
+	return token[len(prefix):], nil
+}
+
+var _ port.TokenIssuer = (*fakeIssuer)(nil)
+
+var errInvalid = errors.New("invalid")
+
+// withUser é um middleware de teste que injeta um userID autenticado em c.Locals,
+// simulando o middleware de auth real.
+func withUser(userID string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		c.Locals(middleware.LocalsUserID, userID)
+		return c.Next()
 	}
 }
 

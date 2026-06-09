@@ -9,3 +9,11 @@ url = "postgres://localhost:5432/gah?sslmode=disable"
 max_open_conns = 25
 max_idle_conns = 10
 conn_max_lifetime = "5m"
+
+[auth]
+# Segredo usado para assinar tokens JWT (HS256). Sobrescreva via AUTH_JWT_SECRET.
+jwt_secret = "change-me-in-production"
+# Tempo de validade do token de acesso. Sobrescreva via AUTH_TOKEN_TTL.
+token_ttl = "24h"
+# Pepper aplicado ao hash Argon2id da senha. Sobrescreva via AUTH_PASSWORD_PEPPER.
+password_pepper = ""

@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -165,3 +166,87 @@ func (m *mockEventPublisher) Publish(_ context.Context, event port.Event) error 
 }
 
 var _ port.EventPublisher = (*mockEventPublisher)(nil)
+
+type mockUserRepo struct {
+	byID       map[string]*entity.User
+	byEmail    map[string]*entity.User
+	saveCalled int
+	saveErr    error
+}
+
+func newMockUserRepo() *mockUserRepo {
+	return &mockUserRepo{
+		byID:    make(map[string]*entity.User),
+		byEmail: make(map[string]*entity.User),
+	}
+}
+
+func (m *mockUserRepo) Save(_ context.Context, u *entity.User) error {
+	m.saveCalled++
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	m.byID[u.ID] = u
+	m.byEmail[u.Email] = u
+	return nil
+}
+
+func (m *mockUserRepo) FindByID(_ context.Context, id string) (*entity.User, error) {
+	u, ok := m.byID[id]
+	if !ok {
+		return nil, nil
+	}
+	return u, nil
+}
+
+func (m *mockUserRepo) FindByEmail(_ context.Context, email string) (*entity.User, error) {
+	u, ok := m.byEmail[email]
+	if !ok {
+		return nil, nil
+	}
+	return u, nil
+}
+
+var _ port.UserRepository = (*mockUserRepo)(nil)
+
+// mockHasher é um hasher determinístico de teste: hash = "hashed:" + plain.
+type mockHasher struct {
+	hashErr error
+}
+
+func (m *mockHasher) Hash(plain string) (string, error) {
+	if m.hashErr != nil {
+		return "", m.hashErr
+	}
+	return "hashed:" + plain, nil
+}
+
+func (m *mockHasher) Compare(hash, plain string) error {
+	if hash != "hashed:"+plain {
+		return errors.New("mismatch")
+	}
+	return nil
+}
+
+var _ port.PasswordHasher = (*mockHasher)(nil)
+
+type mockTokenIssuer struct {
+	issueErr error
+}
+
+func (m *mockTokenIssuer) Issue(userID string) (string, error) {
+	if m.issueErr != nil {
+		return "", m.issueErr
+	}
+	return "token:" + userID, nil
+}
+
+func (m *mockTokenIssuer) Parse(token string) (string, error) {
+	const prefix = "token:"
+	if len(token) <= len(prefix) || token[:len(prefix)] != prefix {
+		return "", errors.New("invalid token")
+	}
+	return token[len(prefix):], nil
+}
+
+var _ port.TokenIssuer = (*mockTokenIssuer)(nil)

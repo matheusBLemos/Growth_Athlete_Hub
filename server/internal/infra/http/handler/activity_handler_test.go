@@ -15,7 +15,7 @@ import (
 func TestActivityHandler_RegisterActivity_Success(t *testing.T) {
 	mocks := newHandlerMocks()
 	app := fiber.New()
-	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
+	app.Post("/api/v1/activities", withUser("user-1"), handler.NewActivityHandler(mocks.registerActivity).Register)
 
 	body := `{
 		"user_id": "user-1",
@@ -50,7 +50,7 @@ func TestActivityHandler_RegisterActivity_Success(t *testing.T) {
 func TestActivityHandler_RegisterActivity_InvalidBody(t *testing.T) {
 	mocks := newHandlerMocks()
 	app := fiber.New()
-	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
+	app.Post("/api/v1/activities", withUser("user-1"), handler.NewActivityHandler(mocks.registerActivity).Register)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/activities", strings.NewReader(`{invalid`))
 	req.Header.Set("Content-Type", "application/json")
@@ -69,7 +69,7 @@ func TestActivityHandler_RegisterActivity_InvalidBody(t *testing.T) {
 func TestActivityHandler_RegisterActivity_ValidationError(t *testing.T) {
 	mocks := newHandlerMocks()
 	app := fiber.New()
-	app.Post("/api/v1/activities", handler.NewActivityHandler(mocks.registerActivity).Register)
+	app.Post("/api/v1/activities", withUser("user-1"), handler.NewActivityHandler(mocks.registerActivity).Register)
 
 	body := `{
 		"user_id": "user-1",

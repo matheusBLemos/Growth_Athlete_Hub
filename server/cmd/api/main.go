@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/auth"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
@@ -36,6 +37,10 @@ func main() {
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)
+	userRepo := postgres.NewUserRepository(db)
+
+	hasher := auth.NewArgon2Hasher(cfg.Auth.PasswordPepper)
+	tokenIssuer := auth.NewJWTIssuer(cfg.Auth.JWTSecret, cfg.Auth.TokenTTL.Duration)
 
 	evaluator := deterministic.NewCompositeEvaluator(
 		deterministic.NewHRVRule(),
@@ -51,7 +56,10 @@ func main() {
 	recordMetric := usecase.NewRecordMetric(metricRepo, publisher)
 	queryMetrics := usecase.NewQueryMetrics(metricRepo)
 	generateInsights := usecase.NewGenerateInsights(metricRepo, insightRepo, evaluator)
+	registerUser := usecase.NewRegisterUser(userRepo, hasher, publisher)
+	loginUser := usecase.NewLoginUser(userRepo, hasher, tokenIssuer)
 
+	authHandler := handler.NewAuthHandler(registerUser, loginUser)
 	activityHandler := handler.NewActivityHandler(registerActivity)
 	metricHandler := handler.NewMetricHandler(recordMetric, queryMetrics)
 	insightHandler := handler.NewInsightHandler(generateInsights)
@@ -62,7 +70,8 @@ func main() {
 			WriteTimeout: cfg.Server.WriteTimeout.Duration,
 			IdleTimeout:  cfg.Server.IdleTimeout.Duration,
 		},
-		activityHandler, metricHandler, insightHandler,
+		tokenIssuer,
+		authHandler, activityHandler, metricHandler, insightHandler,
 	)
 
 	go func() {

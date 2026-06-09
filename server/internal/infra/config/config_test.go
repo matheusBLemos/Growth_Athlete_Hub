@@ -27,6 +27,61 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.MaxOpenConns != 25 {
 		t.Errorf("max_open_conns = %d, want 25", cfg.Database.MaxOpenConns)
 	}
+	if cfg.Auth.JWTSecret != "change-me-in-production" {
+		t.Errorf("jwt_secret = %q, want default", cfg.Auth.JWTSecret)
+	}
+	if cfg.Auth.TokenTTL.Duration != 24*time.Hour {
+		t.Errorf("token_ttl = %v, want 24h", cfg.Auth.TokenTTL)
+	}
+}
+
+func TestLoad_AuthFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[auth]
+jwt_secret = "toml-secret"
+token_ttl = "2h"
+password_pepper = "toml-pepper"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Auth.JWTSecret != "toml-secret" {
+		t.Errorf("jwt_secret = %q, want toml-secret", cfg.Auth.JWTSecret)
+	}
+	if cfg.Auth.TokenTTL.Duration != 2*time.Hour {
+		t.Errorf("token_ttl = %v, want 2h", cfg.Auth.TokenTTL)
+	}
+	if cfg.Auth.PasswordPepper != "toml-pepper" {
+		t.Errorf("password_pepper = %q, want toml-pepper", cfg.Auth.PasswordPepper)
+	}
+}
+
+func TestLoad_AuthEnvOverrides(t *testing.T) {
+	t.Setenv("AUTH_JWT_SECRET", "env-secret")
+	t.Setenv("AUTH_TOKEN_TTL", "30m")
+	t.Setenv("AUTH_PASSWORD_PEPPER", "env-pepper")
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Auth.JWTSecret != "env-secret" {
+		t.Errorf("jwt_secret = %q, want env-secret", cfg.Auth.JWTSecret)
+	}
+	if cfg.Auth.TokenTTL.Duration != 30*time.Minute {
+		t.Errorf("token_ttl = %v, want 30m", cfg.Auth.TokenTTL)
+	}
+	if cfg.Auth.PasswordPepper != "env-pepper" {
+		t.Errorf("password_pepper = %q, want env-pepper", cfg.Auth.PasswordPepper)
+	}
 }
 
 func TestLoad_FromTOML(t *testing.T) {

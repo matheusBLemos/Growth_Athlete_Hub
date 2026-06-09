@@ -7,7 +7,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
+	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/middleware"
 )
 
 // ServerConfig carrega os parâmetros de transporte do servidor HTTP.
@@ -20,6 +22,8 @@ type ServerConfig struct {
 
 func NewRouter(
 	cfg ServerConfig,
+	tokenIssuer port.TokenIssuer,
+	authHandler *handler.AuthHandler,
 	activityHandler *handler.ActivityHandler,
 	metricHandler *handler.MetricHandler,
 	insightHandler *handler.InsightHandler,
@@ -40,12 +44,19 @@ func NewRouter(
 
 	v1 := app.Group("/api/v1")
 
-	v1.Post("/activities", activityHandler.Register)
+	// Rotas públicas de autenticação.
+	v1.Post("/auth/register", authHandler.Register)
+	v1.Post("/auth/login", authHandler.Login)
 
-	v1.Post("/metrics", metricHandler.Record)
-	v1.Get("/metrics", metricHandler.Query)
+	// Rotas protegidas: exigem token válido. O userID é injetado em c.Locals.
+	protected := v1.Group("", middleware.Auth(tokenIssuer))
 
-	v1.Post("/insights/generate", insightHandler.Generate)
+	protected.Post("/activities", activityHandler.Register)
+
+	protected.Post("/metrics", metricHandler.Record)
+	protected.Get("/metrics", metricHandler.Query)
+
+	protected.Post("/insights/generate", insightHandler.Generate)
 
 	return app
 }
