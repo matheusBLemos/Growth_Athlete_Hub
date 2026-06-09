@@ -31,5 +31,8 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# manual tests 
+# manual tests
 manual_tests/
+
+# Build output
+bin/
