@@ -1,5 +1,9 @@
 # Architecture Plan — GAH (Growth Athletic Hub)
 
+> **Note:** this document is the **phased vision** (MVP → scale/AI). For what is
+> **actually implemented today** (modules, events and observability from Sprint
+> 2), see [ARCHITECTURE_CURRENT.md](ARCHITECTURE_CURRENT.md).
+
 ## 1. Overview
 
 **GAH (Growth Athletic Hub)** is a platform for managing exercise metrics, nutrition, rest and sports performance. The system consolidates data from different platforms, devices and applications into a single environment, allowing users to track their physical evolution and receive actionable insights.
