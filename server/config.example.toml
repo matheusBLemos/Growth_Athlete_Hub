@@ -37,3 +37,17 @@ password = ""
 db = 0
 # TTL das entradas de cache do caminho de leitura de métricas. Sobrescreva via REDIS_METRICS_TTL.
 metrics_ttl = "5m"
+
+[connectors.strava]
+# Credenciais da aplicação Strava (https://www.strava.com/settings/api).
+# Sobrescreva via STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET.
+client_id = ""
+client_secret = ""
+# URL de callback OAuth registrada na Strava. Sobrescreva via STRAVA_REDIRECT_URL.
+redirect_url = "http://localhost:8080/api/v1/connectors/strava/callback"
+# Token de verificação da subscription do webhook. Sobrescreva via STRAVA_WEBHOOK_VERIFY_TOKEN.
+webhook_verify_token = "change-me-webhook-token"
+# Endpoints sobrescritíveis (vazio = padrões reais da Strava). Úteis em testes.
+# auth_url = "https://www.strava.com/oauth/authorize"
+# token_url = "https://www.strava.com/oauth/token"
+# api_base_url = "https://www.strava.com"

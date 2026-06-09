@@ -13,8 +13,32 @@ type Config struct {
 	Server    ServerConfig    `toml:"server"`
 	Database  DatabaseConfig  `toml:"database"`
 	Auth      AuthConfig      `toml:"auth"`
-	Messaging MessagingConfig `toml:"messaging"`
-	Redis     RedisConfig     `toml:"redis"`
+	Messaging  MessagingConfig  `toml:"messaging"`
+	Redis      RedisConfig      `toml:"redis"`
+	Connectors ConnectorsConfig `toml:"connectors"`
+}
+
+// ConnectorsConfig agrupa a configuração dos conectores de provedores externos.
+type ConnectorsConfig struct {
+	Strava StravaConfig `toml:"strava"`
+}
+
+// StravaConfig carrega as credenciais e endpoints do conector Strava.
+type StravaConfig struct {
+	// ClientID é o client_id da aplicação Strava. Sobrescreva via STRAVA_CLIENT_ID.
+	ClientID string `toml:"client_id"`
+	// ClientSecret é o client_secret da aplicação Strava. Sobrescreva via STRAVA_CLIENT_SECRET.
+	ClientSecret string `toml:"client_secret"`
+	// RedirectURL é a URL de callback OAuth registrada na Strava. Sobrescreva via STRAVA_REDIRECT_URL.
+	RedirectURL string `toml:"redirect_url"`
+	// WebhookVerifyToken valida a subscription do webhook. Sobrescreva via STRAVA_WEBHOOK_VERIFY_TOKEN.
+	WebhookVerifyToken string `toml:"webhook_verify_token"`
+	// AuthURL sobrescreve o endpoint de autorização OAuth (vazio = padrão Strava).
+	AuthURL string `toml:"auth_url"`
+	// TokenURL sobrescreve o endpoint de token OAuth (vazio = padrão Strava).
+	TokenURL string `toml:"token_url"`
+	// APIBaseURL sobrescreve a base da API (vazio = padrão Strava).
+	APIBaseURL string `toml:"api_base_url"`
 }
 
 type ServerConfig struct {
@@ -124,6 +148,14 @@ func defaults() *Config {
 			DB:         0,
 			MetricsTTL: Duration{5 * time.Minute},
 		},
+		Connectors: ConnectorsConfig{
+			Strava: StravaConfig{
+				ClientID:           "",
+				ClientSecret:       "",
+				RedirectURL:        "http://localhost:8080/api/v1/connectors/strava/callback",
+				WebhookVerifyToken: "change-me-webhook-token",
+			},
+		},
 	}
 }
 
@@ -224,5 +256,27 @@ func applyEnvOverrides(cfg *Config) {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Redis.MetricsTTL = Duration{d}
 		}
+	}
+
+	if v := os.Getenv("STRAVA_CLIENT_ID"); v != "" {
+		cfg.Connectors.Strava.ClientID = v
+	}
+	if v := os.Getenv("STRAVA_CLIENT_SECRET"); v != "" {
+		cfg.Connectors.Strava.ClientSecret = v
+	}
+	if v := os.Getenv("STRAVA_REDIRECT_URL"); v != "" {
+		cfg.Connectors.Strava.RedirectURL = v
+	}
+	if v := os.Getenv("STRAVA_WEBHOOK_VERIFY_TOKEN"); v != "" {
+		cfg.Connectors.Strava.WebhookVerifyToken = v
+	}
+	if v := os.Getenv("STRAVA_AUTH_URL"); v != "" {
+		cfg.Connectors.Strava.AuthURL = v
+	}
+	if v := os.Getenv("STRAVA_TOKEN_URL"); v != "" {
+		cfg.Connectors.Strava.TokenURL = v
+	}
+	if v := os.Getenv("STRAVA_API_BASE_URL"); v != "" {
+		cfg.Connectors.Strava.APIBaseURL = v
 	}
 }
