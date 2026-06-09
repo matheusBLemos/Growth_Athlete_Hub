@@ -382,4 +382,17 @@ func (m *mockProviderTokenRepo) Find(_ context.Context, userID, provider string)
 	return m.tokens[userID+":"+provider], nil
 }
 
+func (m *mockProviderTokenRepo) FindUserByAthlete(_ context.Context, provider, athleteID string) (string, bool, error) {
+	if m.findErr != nil {
+		return "", false, m.findErr
+	}
+	for key, tok := range m.tokens {
+		if tok.Provider == provider && tok.AthleteID == athleteID {
+			// chave é "userID:provider"; recupera o userID.
+			return key[:len(key)-len(provider)-1], true, nil
+		}
+	}
+	return "", false, nil
+}
+
 var _ port.ProviderTokenRepository = (*mockProviderTokenRepo)(nil)
