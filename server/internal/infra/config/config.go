@@ -125,10 +125,15 @@ type RedisConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL             string   `toml:"url"`
-	MaxOpenConns    int      `toml:"max_open_conns"`
-	MaxIdleConns    int      `toml:"max_idle_conns"`
+	URL          string `toml:"url"`
+	MaxOpenConns int    `toml:"max_open_conns"`
+	MaxIdleConns int    `toml:"max_idle_conns"`
+	// ConnMaxLifetime é o tempo máximo de vida de uma conexão (reciclagem).
 	ConnMaxLifetime Duration `toml:"conn_max_lifetime"`
+	// ConnMaxIdleTime fecha conexões ociosas após esse tempo. Torna o pool
+	// elástico: cresce até MaxOpenConns sob carga e encolhe quando o tráfego
+	// cai, sem manter conexões abertas (e processos no Postgres) à toa.
+	ConnMaxIdleTime Duration `toml:"conn_max_idle_time"`
 }
 
 type Duration struct {
@@ -171,9 +176,10 @@ func defaults() *Config {
 		},
 		Database: DatabaseConfig{
 			URL:             "postgres://localhost:5432/gah?sslmode=disable",
-			MaxOpenConns:    25,
-			MaxIdleConns:    10,
+			MaxOpenConns:    50,
+			MaxIdleConns:    25,
 			ConnMaxLifetime: Duration{5 * time.Minute},
+			ConnMaxIdleTime: Duration{90 * time.Second},
 		},
 		Auth: AuthConfig{
 			JWTSecret:      "change-me-in-production",
@@ -263,6 +269,12 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DB_CONN_MAX_LIFETIME"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Database.ConnMaxLifetime = Duration{d}
+		}
+	}
+
+	if v := os.Getenv("DB_CONN_MAX_IDLE_TIME"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Database.ConnMaxIdleTime = Duration{d}
 		}
 	}
 

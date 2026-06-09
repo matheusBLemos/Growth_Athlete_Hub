@@ -70,6 +70,7 @@ func main() {
 	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime.Duration)
+	db.SetConnMaxIdleTime(cfg.Database.ConnMaxIdleTime.Duration)
 
 	// Auto-migração no boot: aplica as migrations embutidas (rastreadas em
 	// schema_migrations) antes de consumir eventos. Idempotente.
