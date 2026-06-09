@@ -1,0 +1,40 @@
+// Grafana Alloy — descobre os containers do GAH, lê o stdout (logs JSON
+// estruturados) e envia para o Loki embutido no container `lgtm`.
+//
+// Os logs são enviados crus (linha JSON). No Grafana, use o parser do Loki
+// (`| json`) para extrair campos como level, msg e trace_id em tempo de query
+// — evita rótulos de alta cardinalidade (ex.: trace_id como label).
+
+discovery.docker "gah" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Mantém apenas os containers da aplicação (gah-server, gah-worker) e usa o
+// nome do container como label `container`.
+discovery.relabel "gah" {
+  targets = discovery.docker.gah.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(gah-server|gah-worker)"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "gah" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.gah.output
+  labels     = { job = "gah" }
+  forward_to = [loki.write.lgtm.receiver]
+}
+
+loki.write "lgtm" {
+  endpoint {
+    url = "http://lgtm:3100/loki/api/v1/push"
+  }
+}
