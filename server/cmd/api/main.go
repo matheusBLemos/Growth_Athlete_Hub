@@ -37,6 +37,12 @@ func main() {
 	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime.Duration)
 
+	// Auto-migração no boot: aplica as migrations embutidas (rastreadas em
+	// schema_migrations) antes de servir. Idempotente.
+	if err := postgres.Migrate(db); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)

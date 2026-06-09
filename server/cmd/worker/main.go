@@ -41,6 +41,12 @@ func main() {
 	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime.Duration)
 
+	// Auto-migração no boot: aplica as migrations embutidas (rastreadas em
+	// schema_migrations) antes de consumir eventos. Idempotente.
+	if err := postgres.Migrate(db); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
 	// O worker publica eventos derivados (ex.: insight.generated), reusando o
 	// mesmo topic exchange da API.
 	publisher, err := rabbitmq.NewPublisher(cfg.Messaging.URL, cfg.Messaging.Exchange)
