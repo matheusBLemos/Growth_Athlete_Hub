@@ -1,5 +1,9 @@
 # Plano de Arquitetura — GAH (Growth Athletic Hub)
 
+> **Nota:** este documento é a **visão por fases** (MVP → escala/IA). Para o que
+> está **efetivamente implementado hoje** (módulos, eventos e observabilidade
+> da Sprint 2), veja [ARCHITECTURE_CURRENT_PT.md](ARCHITECTURE_CURRENT_PT.md).
+
 ## 1. Visao Geral
 
 **GAH (Growth Athletic Hub)** e uma plataforma para gerenciamento de metricas de exercicio, alimentacao, descanso e performance esportiva. O sistema consolida dados de diferentes plataformas, dispositivos e aplicacoes num unico ambiente, permitindo que o usuario acompanhe sua evolucao fisica e receba insights acionaveis.
