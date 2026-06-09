@@ -26,10 +26,26 @@ go.work.sum
 
 # env file
 .env
+.env.*
+!.env.example
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+credentials.json
+serviceAccountKey.json
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
 
-# manual tests 
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# manual tests
 manual_tests/
+
+# Build output
+bin/
