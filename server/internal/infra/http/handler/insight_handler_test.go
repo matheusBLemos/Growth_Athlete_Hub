@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,9 +14,9 @@ import (
 func TestInsightHandler_Generate_Success(t *testing.T) {
 	mocks := newHandlerMocks()
 	app := fiber.New()
-	app.Post("/api/v1/insights/generate", handler.NewInsightHandler(mocks.generateInsights).Generate)
+	app.Post("/api/v1/insights/generate", withUser("user-1"), handler.NewInsightHandler(mocks.generateInsights).Generate)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights/generate", strings.NewReader(`{"user_id": "user-1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights/generate", nil)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -42,9 +41,10 @@ func TestInsightHandler_Generate_Success(t *testing.T) {
 func TestInsightHandler_Generate_EmptyUserID(t *testing.T) {
 	mocks := newHandlerMocks()
 	app := fiber.New()
-	app.Post("/api/v1/insights/generate", handler.NewInsightHandler(mocks.generateInsights).Generate)
+	// Sem usuário no contexto: o handler deve recusar com 422 (ErrEmptyUserID).
+	app.Post("/api/v1/insights/generate", withUser(""), handler.NewInsightHandler(mocks.generateInsights).Generate)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights/generate", strings.NewReader(`{"user_id": ""}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights/generate", nil)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)

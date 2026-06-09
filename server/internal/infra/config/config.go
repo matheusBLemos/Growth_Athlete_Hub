@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Server   ServerConfig   `toml:"server"`
 	Database DatabaseConfig `toml:"database"`
+	Auth     AuthConfig     `toml:"auth"`
 }
 
 type ServerConfig struct {
@@ -19,6 +20,15 @@ type ServerConfig struct {
 	ReadTimeout  Duration `toml:"read_timeout"`
 	WriteTimeout Duration `toml:"write_timeout"`
 	IdleTimeout  Duration `toml:"idle_timeout"`
+}
+
+type AuthConfig struct {
+	// JWTSecret assina os tokens JWT (HS256).
+	JWTSecret string `toml:"jwt_secret"`
+	// TokenTTL define o tempo de validade do token de acesso.
+	TokenTTL Duration `toml:"token_ttl"`
+	// PasswordPepper é um segredo da aplicação aplicado ao hash Argon2id da senha.
+	PasswordPepper string `toml:"password_pepper"`
 }
 
 type DatabaseConfig struct {
@@ -72,6 +82,11 @@ func defaults() *Config {
 			MaxIdleConns:    10,
 			ConnMaxLifetime: Duration{5 * time.Minute},
 		},
+		Auth: AuthConfig{
+			JWTSecret:      "change-me-in-production",
+			TokenTTL:       Duration{24 * time.Hour},
+			PasswordPepper: "",
+		},
 	}
 }
 
@@ -120,5 +135,19 @@ func applyEnvOverrides(cfg *Config) {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Database.ConnMaxLifetime = Duration{d}
 		}
+	}
+
+	if v := os.Getenv("AUTH_JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+
+	if v := os.Getenv("AUTH_TOKEN_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Auth.TokenTTL = Duration{d}
+		}
+	}
+
+	if v := os.Getenv("AUTH_PASSWORD_PEPPER"); v != "" {
+		cfg.Auth.PasswordPepper = v
 	}
 }

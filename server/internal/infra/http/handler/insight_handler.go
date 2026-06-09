@@ -17,18 +17,11 @@ func NewInsightHandler(generate *usecase.GenerateInsights) *InsightHandler {
 	return &InsightHandler{generateInsights: generate}
 }
 
-type generateInsightsRequest struct {
-	UserID string `json:"user_id"`
-}
-
 func (h *InsightHandler) Generate(c *fiber.Ctx) error {
-	var req generateInsightsRequest
-	if err := c.BodyParser(&req); err != nil {
-		return writeError(c, fiber.StatusBadRequest, "invalid request body")
-	}
+	userID := userIDFromCtx(c)
 
 	output, err := h.generateInsights.Execute(c.Context(), usecase.GenerateInsightsInput{
-		UserID: req.UserID,
+		UserID: userID,
 	})
 	if err != nil {
 		if errors.Is(err, entity.ErrEmptyUserID) {

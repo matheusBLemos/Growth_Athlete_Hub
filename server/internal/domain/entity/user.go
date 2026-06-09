@@ -8,11 +8,12 @@ import (
 )
 
 type User struct {
-	ID        string
-	Name      string
-	Email     string
-	BirthDate time.Time
-	CreatedAt time.Time
+	ID           string
+	Name         string
+	Email        string
+	PasswordHash string
+	BirthDate    time.Time
+	CreatedAt    time.Time
 }
 
 func NewUser(name, email string, birthDate time.Time) (*User, error) {
@@ -37,6 +38,21 @@ func NewUser(name, email string, birthDate time.Time) (*User, error) {
 		BirthDate: birthDate,
 		CreatedAt: time.Now(),
 	}, nil
+}
+
+// NewUserWithCredentials cria um usuário já com o hash da senha.
+// O hash é responsabilidade da camada de aplicação/infra — o domínio
+// nunca conhece a senha em texto puro nem importa o algoritmo de hashing.
+func NewUserWithCredentials(name, email, passwordHash string, birthDate time.Time) (*User, error) {
+	user, err := NewUser(name, email, birthDate)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(passwordHash) == "" {
+		return nil, ErrEmptyPasswordHash
+	}
+	user.PasswordHash = passwordHash
+	return user, nil
 }
 
 func isValidEmail(email string) bool {

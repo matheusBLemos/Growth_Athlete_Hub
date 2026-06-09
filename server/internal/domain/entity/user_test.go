@@ -50,6 +50,30 @@ func TestNewUser_BirthDateInFuture(t *testing.T) {
 	}
 }
 
+func TestNewUserWithCredentials_Valid(t *testing.T) {
+	u, err := entity.NewUserWithCredentials("Matheus", "matheus@email.com", "argon2id-hash", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if u.PasswordHash != "argon2id-hash" {
+		t.Fatalf("expected password hash to be set, got %q", u.PasswordHash)
+	}
+}
+
+func TestNewUserWithCredentials_EmptyHash(t *testing.T) {
+	_, err := entity.NewUserWithCredentials("Matheus", "matheus@email.com", "  ", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != entity.ErrEmptyPasswordHash {
+		t.Fatalf("expected ErrEmptyPasswordHash, got %v", err)
+	}
+}
+
+func TestNewUserWithCredentials_PropagatesValidation(t *testing.T) {
+	_, err := entity.NewUserWithCredentials("", "matheus@email.com", "hash", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != entity.ErrEmptyName {
+		t.Fatalf("expected ErrEmptyName, got %v", err)
+	}
+}
+
 func TestNewUser_CreatedAtIsSet(t *testing.T) {
 	before := time.Now().Add(-time.Second)
 	u, err := entity.NewUser("Matheus", "matheus@email.com", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))

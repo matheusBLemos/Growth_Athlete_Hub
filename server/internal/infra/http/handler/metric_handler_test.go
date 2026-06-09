@@ -15,8 +15,8 @@ import (
 func newMetricApp(mocks handlerMocks) *fiber.App {
 	app := fiber.New()
 	h := handler.NewMetricHandler(mocks.recordMetric, mocks.queryMetrics)
-	app.Post("/api/v1/metrics", h.Record)
-	app.Get("/api/v1/metrics", h.Query)
+	app.Post("/api/v1/metrics", withUser("user-1"), h.Record)
+	app.Get("/api/v1/metrics", withUser("user-1"), h.Query)
 	return app
 }
 

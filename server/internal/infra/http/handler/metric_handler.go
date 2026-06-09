@@ -24,13 +24,14 @@ func NewMetricHandler(record *usecase.RecordMetric, query *usecase.QueryMetrics)
 }
 
 type recordMetricRequest struct {
-	UserID     string  `json:"user_id"`
 	MetricType string  `json:"metric_type"`
 	Value      float64 `json:"value"`
 	Date       string  `json:"date"`
 }
 
 func (h *MetricHandler) Record(c *fiber.Ctx) error {
+	userID := userIDFromCtx(c)
+
 	var req recordMetricRequest
 	if err := c.BodyParser(&req); err != nil {
 		return writeError(c, fiber.StatusBadRequest, "invalid request body")
@@ -42,7 +43,7 @@ func (h *MetricHandler) Record(c *fiber.Ctx) error {
 	}
 
 	input := usecase.RecordMetricInput{
-		UserID:     req.UserID,
+		UserID:     userID,
 		MetricType: req.MetricType,
 		Value:      req.Value,
 		Date:       date,
@@ -63,13 +64,13 @@ func (h *MetricHandler) Record(c *fiber.Ctx) error {
 }
 
 func (h *MetricHandler) Query(c *fiber.Ctx) error {
-	userID := c.Query("user_id")
+	userID := userIDFromCtx(c)
 	metricType := c.Query("metric_type")
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
-	if userID == "" || metricType == "" || fromStr == "" || toStr == "" {
-		return writeError(c, fiber.StatusBadRequest, "missing required query params: user_id, metric_type, from, to")
+	if metricType == "" || fromStr == "" || toStr == "" {
+		return writeError(c, fiber.StatusBadRequest, "missing required query params: metric_type, from, to")
 	}
 
 	from, err := time.Parse(time.RFC3339, fromStr)
