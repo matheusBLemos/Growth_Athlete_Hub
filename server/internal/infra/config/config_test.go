@@ -113,6 +113,68 @@ func TestLoad_RedisEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_NotificationsDefaults(t *testing.T) {
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Notifications.Provider != "log" {
+		t.Errorf("notifications provider = %q, want log", cfg.Notifications.Provider)
+	}
+	if cfg.Notifications.FCMServerKey != "" {
+		t.Errorf("notifications fcm_server_key = %q, want empty", cfg.Notifications.FCMServerKey)
+	}
+}
+
+func TestLoad_NotificationsFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[notifications]
+provider = "fcm"
+fcm_base_url = "https://push.test/send"
+fcm_server_key = "toml-key"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Notifications.Provider != "fcm" {
+		t.Errorf("provider = %q, want fcm", cfg.Notifications.Provider)
+	}
+	if cfg.Notifications.FCMBaseURL != "https://push.test/send" {
+		t.Errorf("fcm_base_url = %q", cfg.Notifications.FCMBaseURL)
+	}
+	if cfg.Notifications.FCMServerKey != "toml-key" {
+		t.Errorf("fcm_server_key = %q, want toml-key", cfg.Notifications.FCMServerKey)
+	}
+}
+
+func TestLoad_NotificationsEnvOverrides(t *testing.T) {
+	t.Setenv("NOTIFICATIONS_PROVIDER", "fcm")
+	t.Setenv("FCM_BASE_URL", "https://env.test/send")
+	t.Setenv("FCM_SERVER_KEY", "env-key")
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Notifications.Provider != "fcm" {
+		t.Errorf("provider = %q, want fcm", cfg.Notifications.Provider)
+	}
+	if cfg.Notifications.FCMBaseURL != "https://env.test/send" {
+		t.Errorf("fcm_base_url = %q", cfg.Notifications.FCMBaseURL)
+	}
+	if cfg.Notifications.FCMServerKey != "env-key" {
+		t.Errorf("fcm_server_key = %q, want env-key", cfg.Notifications.FCMServerKey)
+	}
+}
+
 func TestLoad_StravaDefaults(t *testing.T) {
 	cfg, err := config.Load("")
 	if err != nil {

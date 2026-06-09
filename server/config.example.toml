@@ -51,3 +51,12 @@ webhook_verify_token = "change-me-webhook-token"
 # auth_url = "https://www.strava.com/oauth/authorize"
 # token_url = "https://www.strava.com/oauth/token"
 # api_base_url = "https://www.strava.com"
+
+[notifications]
+# Provedor de push: "fcm" ou "log". Sobrescreva via NOTIFICATIONS_PROVIDER.
+# Se fcm_server_key estiver vazia, a wiring usa o LogNotifier (stub seguro).
+provider = "log"
+# Endpoint de envio do FCM (vazio = endpoint real). Sobrescreva via FCM_BASE_URL.
+fcm_base_url = ""
+# Chave de servidor do FCM. Sobrescreva via FCM_SERVER_KEY.
+fcm_server_key = ""
