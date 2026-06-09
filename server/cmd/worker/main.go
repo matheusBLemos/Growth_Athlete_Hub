@@ -18,6 +18,7 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/connectors/strava"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/notifications"
@@ -66,7 +67,7 @@ func main() {
 	}
 	defer subscriber.Close()
 
-	registerHandlers(subscriber, db, publisher, cfg.Notifications)
+	registerHandlers(subscriber, db, publisher, cfg.Notifications, cfg.Connectors.Strava)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,12 +94,13 @@ func main() {
 // O módulo de Processamento reusa RegisterActivity (persistência + dedup por
 // external_id) e GenerateInsights, e roda a agregação diária — exatamente as
 // use cases da API, evitando duplicação de lógica.
-func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher, notifyCfg config.NotificationsConfig) {
+func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher, notifyCfg config.NotificationsConfig, stravaCfg config.StravaConfig) {
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)
 	aggRepo := postgres.NewAggregatedMetricRepository(db)
 	deviceRepo := postgres.NewDeviceRepository(db)
+	providerTokenRepo := postgres.NewProviderTokenRepository(db)
 
 	evaluator := deterministic.NewCompositeEvaluator(
 		deterministic.NewHRVRule(),
@@ -123,11 +125,19 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 	notifyInsight := usecase.NewNotifyInsight(deviceRepo, notifier)
 	subscriber.Register(notifications.NewInsightNotificationHandler(notifyInsight))
 
-	// TODO: strava.webhook.activity é apenas um gatilho (athlete/object IDs); o
-	// seu handler precisaria do SyncProviderActivities (gateway + token repo)
-	// para buscar a atividade e republicar raw.activity.imported. Quando o
-	// worker tiver acesso ao gateway/token repo, registre-o aqui. Por ora, o
-	// fluxo de sync é disparado pela API (StravaHandler).
+	// Conector Strava: consome strava.webhook.activity, resolve o atleta -> GAH
+	// userID e dispara o SyncProviderActivities, que busca as atividades novas e
+	// republica raw.activity.imported de volta no pipeline de processamento.
+	stravaGateway := strava.NewGateway(strava.Config{
+		ClientID:     stravaCfg.ClientID,
+		ClientSecret: stravaCfg.ClientSecret,
+		RedirectURL:  stravaCfg.RedirectURL,
+		AuthURL:      stravaCfg.AuthURL,
+		TokenURL:     stravaCfg.TokenURL,
+		APIBaseURL:   stravaCfg.APIBaseURL,
+	})
+	syncProvider := usecase.NewSyncProviderActivities(stravaGateway, providerTokenRepo, publisher)
+	subscriber.Register(processing.NewStravaWebhookHandler(providerTokenRepo, syncProvider))
 }
 
 // buildNotifier escolhe o adaptador de push conforme a config: FCMNotifier

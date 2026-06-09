@@ -62,6 +62,14 @@ func (r *fakeTokenRepo) Save(_ context.Context, userID string, token port.Provid
 func (r *fakeTokenRepo) Find(_ context.Context, userID, provider string) (*port.ProviderToken, error) {
 	return r.tokens[userID+":"+provider], nil
 }
+func (r *fakeTokenRepo) FindUserByAthlete(_ context.Context, provider, athleteID string) (string, bool, error) {
+	for key, tok := range r.tokens {
+		if tok.Provider == provider && tok.AthleteID == athleteID {
+			return key[:len(key)-len(provider)-1], true, nil
+		}
+	}
+	return "", false, nil
+}
 
 var _ port.ProviderTokenRepository = (*fakeTokenRepo)(nil)
 

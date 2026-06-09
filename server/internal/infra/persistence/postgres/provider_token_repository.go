@@ -58,6 +58,26 @@ func (r *ProviderTokenRepository) Find(ctx context.Context, userID, provider str
 	return &t, nil
 }
 
+// FindUserByAthlete resolve o GAH userID pelo athlete id do provedor, usando o
+// índice em (provider, athlete_id). Retorna found=false (sem erro) quando não
+// há linha correspondente.
+func (r *ProviderTokenRepository) FindUserByAthlete(ctx context.Context, provider, athleteID string) (string, bool, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT user_id FROM provider_tokens WHERE provider = $1 AND athlete_id = $2`,
+		provider, athleteID,
+	)
+
+	var userID string
+	err := row.Scan(&userID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return userID, true, nil
+}
+
 func nullTime(t time.Time) *time.Time {
 	if t.IsZero() {
 		return nil

@@ -9,4 +9,8 @@ type ProviderTokenRepository interface {
 	Save(ctx context.Context, userID string, token ProviderToken) error
 	// Find retorna o token do usuário para o provedor, ou (nil, nil) se ausente.
 	Find(ctx context.Context, userID, provider string) (*ProviderToken, error)
+	// FindUserByAthlete resolve o GAH userID a partir do athlete id de um provedor
+	// (ex.: o owner_id de um webhook da Strava). found=false (sem erro) quando não
+	// há vínculo conhecido para aquele (provider, athleteID).
+	FindUserByAthlete(ctx context.Context, provider, athleteID string) (userID string, found bool, err error)
 }
