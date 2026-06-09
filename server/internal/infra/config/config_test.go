@@ -121,8 +121,11 @@ func TestLoad_NotificationsDefaults(t *testing.T) {
 	if cfg.Notifications.Provider != "log" {
 		t.Errorf("notifications provider = %q, want log", cfg.Notifications.Provider)
 	}
-	if cfg.Notifications.FCMServerKey != "" {
-		t.Errorf("notifications fcm_server_key = %q, want empty", cfg.Notifications.FCMServerKey)
+	if cfg.Notifications.FCMCredentialsFile != "" {
+		t.Errorf("notifications fcm_credentials_file = %q, want empty", cfg.Notifications.FCMCredentialsFile)
+	}
+	if cfg.Notifications.FCMProjectID != "" {
+		t.Errorf("notifications fcm_project_id = %q, want empty", cfg.Notifications.FCMProjectID)
 	}
 }
 
@@ -133,8 +136,9 @@ func TestLoad_NotificationsFromTOML(t *testing.T) {
 	content := `
 [notifications]
 provider = "fcm"
-fcm_base_url = "https://push.test/send"
-fcm_server_key = "toml-key"
+fcm_base_url = "https://push.test"
+fcm_credentials_file = "/etc/gah/fcm.json"
+fcm_project_id = "gah-proj"
 `
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write file: %v", err)
@@ -147,18 +151,22 @@ fcm_server_key = "toml-key"
 	if cfg.Notifications.Provider != "fcm" {
 		t.Errorf("provider = %q, want fcm", cfg.Notifications.Provider)
 	}
-	if cfg.Notifications.FCMBaseURL != "https://push.test/send" {
+	if cfg.Notifications.FCMBaseURL != "https://push.test" {
 		t.Errorf("fcm_base_url = %q", cfg.Notifications.FCMBaseURL)
 	}
-	if cfg.Notifications.FCMServerKey != "toml-key" {
-		t.Errorf("fcm_server_key = %q, want toml-key", cfg.Notifications.FCMServerKey)
+	if cfg.Notifications.FCMCredentialsFile != "/etc/gah/fcm.json" {
+		t.Errorf("fcm_credentials_file = %q, want /etc/gah/fcm.json", cfg.Notifications.FCMCredentialsFile)
+	}
+	if cfg.Notifications.FCMProjectID != "gah-proj" {
+		t.Errorf("fcm_project_id = %q, want gah-proj", cfg.Notifications.FCMProjectID)
 	}
 }
 
 func TestLoad_NotificationsEnvOverrides(t *testing.T) {
 	t.Setenv("NOTIFICATIONS_PROVIDER", "fcm")
-	t.Setenv("FCM_BASE_URL", "https://env.test/send")
-	t.Setenv("FCM_SERVER_KEY", "env-key")
+	t.Setenv("FCM_BASE_URL", "https://env.test")
+	t.Setenv("FCM_CREDENTIALS_FILE", "/env/fcm.json")
+	t.Setenv("FCM_PROJECT_ID", "env-proj")
 
 	cfg, err := config.Load("")
 	if err != nil {
@@ -167,11 +175,14 @@ func TestLoad_NotificationsEnvOverrides(t *testing.T) {
 	if cfg.Notifications.Provider != "fcm" {
 		t.Errorf("provider = %q, want fcm", cfg.Notifications.Provider)
 	}
-	if cfg.Notifications.FCMBaseURL != "https://env.test/send" {
+	if cfg.Notifications.FCMBaseURL != "https://env.test" {
 		t.Errorf("fcm_base_url = %q", cfg.Notifications.FCMBaseURL)
 	}
-	if cfg.Notifications.FCMServerKey != "env-key" {
-		t.Errorf("fcm_server_key = %q, want env-key", cfg.Notifications.FCMServerKey)
+	if cfg.Notifications.FCMCredentialsFile != "/env/fcm.json" {
+		t.Errorf("fcm_credentials_file = %q, want /env/fcm.json", cfg.Notifications.FCMCredentialsFile)
+	}
+	if cfg.Notifications.FCMProjectID != "env-proj" {
+		t.Errorf("fcm_project_id = %q, want env-proj", cfg.Notifications.FCMProjectID)
 	}
 }
 

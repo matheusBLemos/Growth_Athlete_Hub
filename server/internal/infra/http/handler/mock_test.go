@@ -8,10 +8,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
-	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/middleware"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/entity"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/domain/valueobject"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/middleware"
 )
 
 type handlerMocks struct {
