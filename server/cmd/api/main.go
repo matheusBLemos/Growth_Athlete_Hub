@@ -8,9 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
@@ -19,22 +19,20 @@ import (
 )
 
 func main() {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Println("WARNING: DATABASE_URL not set, using local default")
-		dsn = "postgres://localhost:5432/gah?sslmode=disable"
+	cfg, err := config.Load("config.toml")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	db, err := postgres.NewDB(dsn)
+	db, err := postgres.NewDB(cfg.Database.URL)
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
+	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime.Duration)
 
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
@@ -62,15 +60,15 @@ func main() {
 	r := router.NewRouter(activityHandler, metricHandler, insightHandler)
 
 	srv := &http.Server{
-		Addr:         ":" + port,
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.Server.ReadTimeout.Duration,
+		WriteTimeout: cfg.Server.WriteTimeout.Duration,
+		IdleTimeout:  cfg.Server.IdleTimeout.Duration,
 	}
 
 	go func() {
-		fmt.Printf("GAH Server starting on :%s\n", port)
+		fmt.Printf("GAH Server starting on :%d\n", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
@@ -81,7 +79,7 @@ func main() {
 	<-quit
 
 	log.Println("shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout.Duration)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
