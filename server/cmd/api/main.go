@@ -10,6 +10,7 @@ import (
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/auth"
+	rediscache "github.com/Growth-Athlete-Hub/gah-server/internal/infra/cache/redis"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
@@ -57,9 +58,24 @@ func main() {
 	}
 	defer publisher.Close()
 
+	cache, err := rediscache.New(rediscache.Config{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	if err != nil {
+		log.Fatalf("failed to create redis cache: %v", err)
+	}
+	if err := cache.Ping(context.Background()); err != nil {
+		log.Fatalf("failed to connect to redis: %v", err)
+	}
+	defer cache.Close()
+
+	metricsTTL := cfg.Redis.MetricsTTL.Duration
+
 	registerActivity := usecase.NewRegisterActivity(activityRepo, publisher)
-	recordMetric := usecase.NewRecordMetric(metricRepo, publisher)
-	queryMetrics := usecase.NewQueryMetrics(metricRepo)
+	recordMetric := usecase.NewRecordMetric(metricRepo, publisher, cache, metricsTTL)
+	queryMetrics := usecase.NewQueryMetrics(metricRepo, cache, metricsTTL)
 	generateInsights := usecase.NewGenerateInsights(metricRepo, insightRepo, evaluator)
 	registerUser := usecase.NewRegisterUser(userRepo, hasher, publisher)
 	loginUser := usecase.NewLoginUser(userRepo, hasher, tokenIssuer)

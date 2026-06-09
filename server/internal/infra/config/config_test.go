@@ -45,6 +45,72 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Messaging.Prefetch != 10 {
 		t.Errorf("messaging prefetch = %d, want 10", cfg.Messaging.Prefetch)
 	}
+	if cfg.Redis.Addr != "localhost:6379" {
+		t.Errorf("redis addr = %q, want localhost:6379", cfg.Redis.Addr)
+	}
+	if cfg.Redis.DB != 0 {
+		t.Errorf("redis db = %d, want 0", cfg.Redis.DB)
+	}
+	if cfg.Redis.MetricsTTL.Duration != 5*time.Minute {
+		t.Errorf("redis metrics_ttl = %v, want 5m", cfg.Redis.MetricsTTL)
+	}
+}
+
+func TestLoad_RedisFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[redis]
+addr = "redis-host:6380"
+password = "toml-pass"
+db = 3
+metrics_ttl = "90s"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Redis.Addr != "redis-host:6380" {
+		t.Errorf("redis addr = %q, want redis-host:6380", cfg.Redis.Addr)
+	}
+	if cfg.Redis.Password != "toml-pass" {
+		t.Errorf("redis password = %q, want toml-pass", cfg.Redis.Password)
+	}
+	if cfg.Redis.DB != 3 {
+		t.Errorf("redis db = %d, want 3", cfg.Redis.DB)
+	}
+	if cfg.Redis.MetricsTTL.Duration != 90*time.Second {
+		t.Errorf("redis metrics_ttl = %v, want 90s", cfg.Redis.MetricsTTL)
+	}
+}
+
+func TestLoad_RedisEnvOverrides(t *testing.T) {
+	t.Setenv("REDIS_ADDR", "env-redis:6390")
+	t.Setenv("REDIS_PASSWORD", "env-pass")
+	t.Setenv("REDIS_DB", "7")
+	t.Setenv("REDIS_METRICS_TTL", "2m")
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Redis.Addr != "env-redis:6390" {
+		t.Errorf("redis addr = %q, want env-redis:6390", cfg.Redis.Addr)
+	}
+	if cfg.Redis.Password != "env-pass" {
+		t.Errorf("redis password = %q, want env-pass", cfg.Redis.Password)
+	}
+	if cfg.Redis.DB != 7 {
+		t.Errorf("redis db = %d, want 7", cfg.Redis.DB)
+	}
+	if cfg.Redis.MetricsTTL.Duration != 2*time.Minute {
+		t.Errorf("redis metrics_ttl = %v, want 2m", cfg.Redis.MetricsTTL)
+	}
 }
 
 func TestLoad_MessagingFromTOML(t *testing.T) {

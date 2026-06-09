@@ -52,6 +52,19 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: gah-redis
+    ports:
+      - "6379:6379" # exposto p/ o `go run` no host alcançar o cache
+    volumes:
+      - gah_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   server:
     build:
       context: ../server
@@ -61,12 +74,15 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
       RABBITMQ_URL: amqp://gah:gah@rabbitmq:5672/
+      REDIS_ADDR: redis:6379
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -91,3 +107,4 @@ services:
 volumes:
   gah_pgdata:
   gah_rabbitmqdata:
+  gah_redisdata:

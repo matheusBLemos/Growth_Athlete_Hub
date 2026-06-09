@@ -14,6 +14,7 @@ type Config struct {
 	Database  DatabaseConfig  `toml:"database"`
 	Auth      AuthConfig      `toml:"auth"`
 	Messaging MessagingConfig `toml:"messaging"`
+	Redis     RedisConfig     `toml:"redis"`
 }
 
 type ServerConfig struct {
@@ -42,6 +43,17 @@ type MessagingConfig struct {
 	QueuePrefix string `toml:"queue_prefix"`
 	// Prefetch é o limite de mensagens não confirmadas por consumidor (QoS).
 	Prefetch int `toml:"prefetch"`
+}
+
+type RedisConfig struct {
+	// Addr é o endereço host:porta do Redis. Sobrescreva via REDIS_ADDR.
+	Addr string `toml:"addr"`
+	// Password é a senha do Redis (vazio = sem auth). Sobrescreva via REDIS_PASSWORD.
+	Password string `toml:"password"`
+	// DB é o índice do banco lógico do Redis. Sobrescreva via REDIS_DB.
+	DB int `toml:"db"`
+	// MetricsTTL é o TTL das entradas de cache do caminho de leitura de métricas.
+	MetricsTTL Duration `toml:"metrics_ttl"`
 }
 
 type DatabaseConfig struct {
@@ -105,6 +117,12 @@ func defaults() *Config {
 			Exchange:    "gah.events",
 			QueuePrefix: "gah",
 			Prefetch:    10,
+		},
+		Redis: RedisConfig{
+			Addr:       "localhost:6379",
+			Password:   "",
+			DB:         0,
+			MetricsTTL: Duration{5 * time.Minute},
 		},
 	}
 }
@@ -185,6 +203,26 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("RABBITMQ_PREFETCH"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Messaging.Prefetch = n
+		}
+	}
+
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+	}
+
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = n
+		}
+	}
+
+	if v := os.Getenv("REDIS_METRICS_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Redis.MetricsTTL = Duration{d}
 		}
 	}
 }

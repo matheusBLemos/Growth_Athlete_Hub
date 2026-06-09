@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -67,6 +68,7 @@ var _ port.ActivityRepository = (*mockActivityRepo)(nil)
 type mockMetricRepo struct {
 	metrics    []*entity.Metric
 	saveCalled int
+	findCalls  int
 	saveErr    error
 }
 
@@ -84,6 +86,7 @@ func (m *mockMetricRepo) Save(_ context.Context, metric *entity.Metric) error {
 }
 
 func (m *mockMetricRepo) FindByUserIDAndType(_ context.Context, userID string, metricType valueobject.MetricType, from, to time.Time) ([]*entity.Metric, error) {
+	m.findCalls++
 	var result []*entity.Metric
 	for _, met := range m.metrics {
 		if met.UserID == userID && met.Type == metricType && !met.Date.Before(from) && !met.Date.After(to) {
@@ -250,3 +253,59 @@ func (m *mockTokenIssuer) Parse(token string) (string, error) {
 }
 
 var _ port.TokenIssuer = (*mockTokenIssuer)(nil)
+
+// fakeCache é um cache em memória para testes da lógica cache-aside.
+// getErr/setErr permitem simular falhas de cache (resiliência).
+type fakeCache struct {
+	mu       sync.Mutex
+	store    map[string][]byte
+	getCalls int
+	setCalls int
+	getErr   error
+	setErr   error
+}
+
+func newFakeCache() *fakeCache {
+	return &fakeCache{store: make(map[string][]byte)}
+}
+
+func (f *fakeCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.getCalls++
+	if f.getErr != nil {
+		return nil, false, f.getErr
+	}
+	v, ok := f.store[key]
+	if !ok {
+		return nil, false, nil
+	}
+	// Devolve uma cópia para evitar aliasing acidental nos testes.
+	cp := make([]byte, len(v))
+	copy(cp, v)
+	return cp, true, nil
+}
+
+func (f *fakeCache) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setCalls++
+	if f.setErr != nil {
+		return f.setErr
+	}
+	cp := make([]byte, len(value))
+	copy(cp, value)
+	f.store[key] = cp
+	return nil
+}
+
+func (f *fakeCache) Delete(_ context.Context, keys ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, k := range keys {
+		delete(f.store, k)
+	}
+	return nil
+}
+
+var _ port.Cache = (*fakeCache)(nil)
