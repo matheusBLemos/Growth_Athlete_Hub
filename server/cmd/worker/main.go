@@ -20,6 +20,7 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/notifications"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/processing"
 )
@@ -59,7 +60,7 @@ func main() {
 	}
 	defer subscriber.Close()
 
-	registerHandlers(subscriber, db, publisher)
+	registerHandlers(subscriber, db, publisher, cfg.Notifications)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,11 +87,12 @@ func main() {
 // O módulo de Processamento reusa RegisterActivity (persistência + dedup por
 // external_id) e GenerateInsights, e roda a agregação diária — exatamente as
 // use cases da API, evitando duplicação de lógica.
-func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher) {
+func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher, notifyCfg config.NotificationsConfig) {
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)
 	aggRepo := postgres.NewAggregatedMetricRepository(db)
+	deviceRepo := postgres.NewDeviceRepository(db)
 
 	evaluator := deterministic.NewCompositeEvaluator(
 		deterministic.NewHRVRule(),
@@ -108,9 +110,31 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 
 	subscriber.Register(processing.NewRawActivityHandler(processRaw))
 
+	// Módulo de Notificações: consome insight.generated e dispara push para os
+	// dispositivos do usuário. Usa o FCMNotifier quando há server key
+	// configurada; caso contrário cai no LogNotifier (stub seguro, sem rede).
+	notifier := buildNotifier(notifyCfg)
+	notifyInsight := usecase.NewNotifyInsight(deviceRepo, notifier)
+	subscriber.Register(notifications.NewInsightNotificationHandler(notifyInsight))
+
 	// TODO: strava.webhook.activity é apenas um gatilho (athlete/object IDs); o
 	// seu handler precisaria do SyncProviderActivities (gateway + token repo)
 	// para buscar a atividade e republicar raw.activity.imported. Quando o
 	// worker tiver acesso ao gateway/token repo, registre-o aqui. Por ora, o
 	// fluxo de sync é disparado pela API (StravaHandler).
+}
+
+// buildNotifier escolhe o adaptador de push conforme a config: FCMNotifier
+// quando provider="fcm" e há server key; caso contrário o LogNotifier (stub
+// seguro, sem chamada externa).
+func buildNotifier(cfg config.NotificationsConfig) port.Notifier {
+	if cfg.Provider == "fcm" && cfg.FCMServerKey != "" {
+		log.Println("notifications: using FCM push notifier")
+		return notifications.NewFCMNotifier(notifications.FCMConfig{
+			BaseURL:   cfg.FCMBaseURL,
+			ServerKey: cfg.FCMServerKey,
+		})
+	}
+	log.Println("notifications: using log notifier (no push provider configured)")
+	return notifications.NewLogNotifier()
 }

@@ -13,9 +13,21 @@ type Config struct {
 	Server    ServerConfig    `toml:"server"`
 	Database  DatabaseConfig  `toml:"database"`
 	Auth      AuthConfig      `toml:"auth"`
-	Messaging  MessagingConfig  `toml:"messaging"`
-	Redis      RedisConfig      `toml:"redis"`
-	Connectors ConnectorsConfig `toml:"connectors"`
+	Messaging     MessagingConfig     `toml:"messaging"`
+	Redis         RedisConfig         `toml:"redis"`
+	Connectors    ConnectorsConfig    `toml:"connectors"`
+	Notifications NotificationsConfig `toml:"notifications"`
+}
+
+// NotificationsConfig carrega a configuração do provedor de push. Quando
+// ServerKey está vazia, a wiring usa o LogNotifier (stub seguro, sem rede).
+type NotificationsConfig struct {
+	// Provider seleciona o adaptador de push: "fcm" ou "log" (padrão "log").
+	Provider string `toml:"provider"`
+	// FCMBaseURL sobrescreve o endpoint de envio do FCM (vazio = endpoint real).
+	FCMBaseURL string `toml:"fcm_base_url"`
+	// FCMServerKey é a chave de servidor do FCM. Vazia => cai no LogNotifier.
+	FCMServerKey string `toml:"fcm_server_key"`
 }
 
 // ConnectorsConfig agrupa a configuração dos conectores de provedores externos.
@@ -156,6 +168,11 @@ func defaults() *Config {
 				WebhookVerifyToken: "change-me-webhook-token",
 			},
 		},
+		Notifications: NotificationsConfig{
+			Provider:     "log",
+			FCMBaseURL:   "",
+			FCMServerKey: "",
+		},
 	}
 }
 
@@ -278,5 +295,15 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("STRAVA_API_BASE_URL"); v != "" {
 		cfg.Connectors.Strava.APIBaseURL = v
+	}
+
+	if v := os.Getenv("NOTIFICATIONS_PROVIDER"); v != "" {
+		cfg.Notifications.Provider = v
+	}
+	if v := os.Getenv("FCM_BASE_URL"); v != "" {
+		cfg.Notifications.FCMBaseURL = v
+	}
+	if v := os.Getenv("FCM_SERVER_KEY"); v != "" {
+		cfg.Notifications.FCMServerKey = v
 	}
 }

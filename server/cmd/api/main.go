@@ -42,6 +42,7 @@ func main() {
 	insightRepo := postgres.NewInsightRepository(db)
 	userRepo := postgres.NewUserRepository(db)
 	providerTokenRepo := postgres.NewProviderTokenRepository(db)
+	deviceRepo := postgres.NewDeviceRepository(db)
 
 	hasher := auth.NewArgon2Hasher(cfg.Auth.PasswordPepper)
 	tokenIssuer := auth.NewJWTIssuer(cfg.Auth.JWTSecret, cfg.Auth.TokenTTL.Duration)
@@ -98,6 +99,7 @@ func main() {
 	metricHandler := handler.NewMetricHandler(recordMetric, queryMetrics)
 	insightHandler := handler.NewInsightHandler(generateInsights)
 	stravaHandler := handler.NewStravaHandler(connectProvider, syncProvider, publisher, tokenIssuer, cfg.Connectors.Strava.WebhookVerifyToken)
+	deviceHandler := handler.NewDeviceHandler(deviceRepo)
 
 	app := router.NewRouter(
 		router.ServerConfig{
@@ -106,7 +108,7 @@ func main() {
 			IdleTimeout:  cfg.Server.IdleTimeout.Duration,
 		},
 		tokenIssuer,
-		authHandler, activityHandler, metricHandler, insightHandler, stravaHandler,
+		authHandler, activityHandler, metricHandler, insightHandler, stravaHandler, deviceHandler,
 	)
 
 	go func() {
