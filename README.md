@@ -3,8 +3,8 @@ Projeto Desenvolvido Para conectar aplicações de performance esportiva
 
 ## Arquitetura
 
-- **Estado atual (as-built, pós Sprint 2):** [docs/diagrams/ARCHITECTURE_CURRENT_PT.md](docs/diagrams/ARCHITECTURE_CURRENT_PT.md) — módulos, eventos, fluxo distribuído e observabilidade, com diagramas.
-- **Visão por fases (MVP → escala/IA):** [docs/diagrams/ARCHITECTURE_PLAN_PT.md](docs/diagrams/ARCHITECTURE_PLAN_PT.md).
+- **Estado atual (as-built, pós Sprint 2):** [PT](docs/diagrams/ARCHITECTURE_CURRENT_PT.md) · [EN](docs/diagrams/ARCHITECTURE_CURRENT.md) — módulos, eventos, fluxo distribuído e observabilidade, com diagramas.
+- **Visão por fases (MVP → escala/IA):** [PT](docs/diagrams/ARCHITECTURE_PLAN_PT.md) · [EN](docs/diagrams/ARCHITECTURE_PLAN.md).
 
 ## Observabilidade
 
