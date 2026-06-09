@@ -86,16 +86,21 @@ func newPublisherWithChannel(ch amqpChannel, exchange string) (*Publisher, error
 	}, nil
 }
 
-// Publish serializa event.Payload em JSON e publica no topic exchange usando
-// event.Type como routing key, com entrega persistente.
+// Publish serializa o envelope port.Event (Type + Payload) em JSON e publica no
+// topic exchange usando event.Type como routing key, com entrega persistente.
+//
+// O corpo é o envelope completo — não só o Payload — porque o Subscriber
+// decodifica a entrega de volta num port.Event. Serializar apenas o Payload faz
+// o consumidor perder Type/Payload (e, pior, capturar um campo "type" do payload
+// como Event.Type), quebrando o despacho.
 //
 // Abre um span de producer e injeta o contexto de trace nos headers da mensagem
 // (W3C TraceContext), permitindo que o consumer (worker) continue o mesmo trace
 // distribuído. Com a telemetria desabilitada, o span é no-op.
 func (p *Publisher) Publish(ctx context.Context, event port.Event) error {
-	body, err := json.Marshal(event.Payload)
+	body, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("marshal event payload: %w", err)
+		return fmt.Errorf("marshal event: %w", err)
 	}
 
 	ctx, span := otel.Tracer(tracerName).Start(ctx, event.Type+" publish",
