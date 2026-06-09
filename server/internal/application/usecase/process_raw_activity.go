@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -86,6 +85,12 @@ func NewProcessRawActivity(
 }
 
 func (uc *ProcessRawActivity) Execute(ctx context.Context, raw RawActivityImported) error {
+	// Mede a duração total do pipeline de processamento (latência do worker).
+	start := time.Now()
+	defer func() {
+		port.MetricsFromContext(ctx).RecordDuration(ctx, "gah.raw_activity.process.duration", time.Since(start))
+	}()
+
 	// 1. Validação.
 	if err := validateRawActivity(raw); err != nil {
 		return err
@@ -106,7 +111,8 @@ func (uc *ProcessRawActivity) Execute(ctx context.Context, raw RawActivityImport
 	// processada antes, então ack sem reprocessar insights.
 	if _, err := uc.register.Execute(ctx, input); err != nil {
 		if errors.Is(err, ErrDuplicateActivity) {
-			log.Printf("process_raw_activity: duplicate external_id=%s (idempotent ack)", raw.ExternalID)
+			port.LoggerFromContext(ctx).Info(ctx, "process_raw_activity: duplicate external_id (idempotent ack)",
+				"user_id", raw.UserID, "external_id", raw.ExternalID)
 			return nil
 		}
 		return fmt.Errorf("register activity: %w", err)
@@ -125,6 +131,9 @@ func (uc *ProcessRawActivity) Execute(ctx context.Context, raw RawActivityImport
 	}
 
 	// 6. Publica um insight.generated por insight recém-gerado.
+	if len(out.Insights) > 0 {
+		port.MetricsFromContext(ctx).IncCounter(ctx, "gah.insights.generated", int64(len(out.Insights)))
+	}
 	for _, ins := range out.Insights {
 		event := port.Event{
 			Type: InsightGeneratedEventType,
@@ -141,7 +150,8 @@ func (uc *ProcessRawActivity) Execute(ctx context.Context, raw RawActivityImport
 			// Não falha o pipeline por falha de publicação: a atividade já foi
 			// persistida (efeito principal). Apenas loga — reprocessar geraria
 			// duplicatas de insights.
-			log.Printf("process_raw_activity: publish %s (insight_id=%s): %v", InsightGeneratedEventType, ins.ID, err)
+			port.LoggerFromContext(ctx).Error(ctx, "process_raw_activity: publish insight.generated failed",
+				"event", InsightGeneratedEventType, "user_id", ins.UserID, "insight_id", ins.ID, "error", err)
 		}
 	}
 

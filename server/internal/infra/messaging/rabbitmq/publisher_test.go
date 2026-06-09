@@ -102,7 +102,7 @@ func TestPublish_RoutingKeyIsEventType(t *testing.T) {
 	}
 }
 
-func TestPublish_BodyIsJSONOfPayload(t *testing.T) {
+func TestPublish_BodyIsJSONOfEnvelope(t *testing.T) {
 	ch := &fakeChannel{}
 	pub := newTestPublisher(t, ch)
 
@@ -111,12 +111,21 @@ func TestPublish_BodyIsJSONOfPayload(t *testing.T) {
 		t.Fatalf("Publish: %v", err)
 	}
 
-	var got map[string]any
+	// O corpo é o envelope port.Event completo, para que o Subscriber recupere
+	// Type e Payload ao decodificar a entrega.
+	var got port.Event
 	if err := json.Unmarshal(ch.lastMsg.Body, &got); err != nil {
 		t.Fatalf("body is not valid JSON: %v", err)
 	}
-	if got["id"] != "m1" || got["value"] != 42.0 {
-		t.Errorf("body = %v, want id=m1 value=42", got)
+	if got.Type != "metric.recorded" {
+		t.Errorf("envelope Type = %q, want metric.recorded", got.Type)
+	}
+	inner, ok := got.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("envelope Payload = %T, want map", got.Payload)
+	}
+	if inner["id"] != "m1" || inner["value"] != 42.0 {
+		t.Errorf("payload = %v, want id=m1 value=42", inner)
 	}
 }
 

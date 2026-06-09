@@ -15,6 +15,7 @@ import (
 type fakeDelivery struct {
 	body       []byte
 	routingKey string
+	headers    amqp.Table
 
 	acked       bool
 	nacked      bool
@@ -22,8 +23,9 @@ type fakeDelivery struct {
 	ackErr      error
 }
 
-func (f *fakeDelivery) Body() []byte       { return f.body }
-func (f *fakeDelivery) RoutingKey() string { return f.routingKey }
+func (f *fakeDelivery) Body() []byte        { return f.body }
+func (f *fakeDelivery) RoutingKey() string  { return f.routingKey }
+func (f *fakeDelivery) Headers() amqp.Table { return f.headers }
 func (f *fakeDelivery) Ack() error {
 	f.acked = true
 	return f.ackErr

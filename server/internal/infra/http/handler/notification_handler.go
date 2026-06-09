@@ -53,7 +53,7 @@ func (h *NotificationHandler) List(c *fiber.Ctx) error {
 		limit = maxNotificationLimit
 	}
 
-	records, err := h.history.ListByUser(c.Context(), userID, limit)
+	records, err := h.history.ListByUser(c.UserContext(), userID, limit)
 	if err != nil {
 		return writeError(c, fiber.StatusInternalServerError, "internal error")
 	}

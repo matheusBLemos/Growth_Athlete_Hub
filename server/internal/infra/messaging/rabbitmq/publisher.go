@@ -11,6 +11,11 @@ import (
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
 )
@@ -81,13 +86,34 @@ func newPublisherWithChannel(ch amqpChannel, exchange string) (*Publisher, error
 	}, nil
 }
 
-// Publish serializa event.Payload em JSON e publica no topic exchange usando
-// event.Type como routing key, com entrega persistente.
+// Publish serializa o envelope port.Event (Type + Payload) em JSON e publica no
+// topic exchange usando event.Type como routing key, com entrega persistente.
+//
+// O corpo é o envelope completo — não só o Payload — porque o Subscriber
+// decodifica a entrega de volta num port.Event. Serializar apenas o Payload faz
+// o consumidor perder Type/Payload (e, pior, capturar um campo "type" do payload
+// como Event.Type), quebrando o despacho.
+//
+// Abre um span de producer e injeta o contexto de trace nos headers da mensagem
+// (W3C TraceContext), permitindo que o consumer (worker) continue o mesmo trace
+// distribuído. Com a telemetria desabilitada, o span é no-op.
 func (p *Publisher) Publish(ctx context.Context, event port.Event) error {
-	body, err := json.Marshal(event.Payload)
+	body, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("marshal event payload: %w", err)
+		return fmt.Errorf("marshal event: %w", err)
 	}
+
+	ctx, span := otel.Tracer(tracerName).Start(ctx, event.Type+" publish",
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			semconv.MessagingSystemRabbitmq,
+			semconv.MessagingDestinationName(p.exchange),
+			attribute.String("messaging.rabbitmq.routing_key", event.Type),
+		),
+	)
+	defer span.End()
+
+	headers := injectTrace(ctx, amqp.Table{})
 
 	if err := p.channel.PublishWithContext(
 		ctx,
@@ -98,9 +124,12 @@ func (p *Publisher) Publish(ctx context.Context, event port.Event) error {
 		amqp.Publishing{
 			ContentType:  contentTypeJSON,
 			DeliveryMode: amqp.Persistent,
+			Headers:      headers,
 			Body:         body,
 		},
 	); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "publish failed")
 		return fmt.Errorf("publish event %q: %w", event.Type, err)
 	}
 	return nil

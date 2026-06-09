@@ -17,6 +17,34 @@ type Config struct {
 	Redis         RedisConfig         `toml:"redis"`
 	Connectors    ConnectorsConfig    `toml:"connectors"`
 	Notifications NotificationsConfig `toml:"notifications"`
+	Observability ObservabilityConfig `toml:"observability"`
+}
+
+// ObservabilityConfig controla a telemetria OpenTelemetry (traces + métricas) e
+// os logs estruturados. Quando Enabled é false (padrão), a aplicação roda sem
+// nenhum exportador/agent — bom para dev local e testes.
+type ObservabilityConfig struct {
+	// Enabled liga toda a telemetria. Sobrescreva via OBSERVABILITY_ENABLED.
+	Enabled bool `toml:"enabled"`
+	// ServiceName identifica o serviço no backend. Cada binário define o seu
+	// (ex.: "gah-api", "gah-worker"). Sobrescreva via OTEL_SERVICE_NAME.
+	ServiceName string `toml:"service_name"`
+	// ServiceVersion é a versão/build do binário (ex.: git SHA). Opcional.
+	ServiceVersion string `toml:"service_version"`
+	// Environment é o ambiente de deploy. Sobrescreva via DD_ENV.
+	Environment string `toml:"environment"`
+	// OTLPEndpoint é o host:porta do collector OTLP/gRPC (ex.: o Datadog Agent).
+	// Sobrescreva via OTEL_EXPORTER_OTLP_ENDPOINT.
+	OTLPEndpoint string `toml:"otlp_endpoint"`
+	// SampleRatio é a fração de traces amostrados (0.0–1.0). Sobrescreva via
+	// OTEL_TRACES_SAMPLER_ARG.
+	SampleRatio float64 `toml:"sample_ratio"`
+	// Insecure usa gRPC sem TLS (padrão para agent local). Sobrescreva via
+	// OTEL_EXPORTER_OTLP_INSECURE.
+	Insecure bool `toml:"insecure"`
+	// LogLevel define o nível mínimo de log estruturado: "debug", "info",
+	// "warn", "error". Sobrescreva via LOG_LEVEL.
+	LogLevel string `toml:"log_level"`
 }
 
 // NotificationsConfig carrega a configuração do provedor de push (FCM HTTP v1).
@@ -97,10 +125,15 @@ type RedisConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL             string   `toml:"url"`
-	MaxOpenConns    int      `toml:"max_open_conns"`
-	MaxIdleConns    int      `toml:"max_idle_conns"`
+	URL          string `toml:"url"`
+	MaxOpenConns int    `toml:"max_open_conns"`
+	MaxIdleConns int    `toml:"max_idle_conns"`
+	// ConnMaxLifetime é o tempo máximo de vida de uma conexão (reciclagem).
 	ConnMaxLifetime Duration `toml:"conn_max_lifetime"`
+	// ConnMaxIdleTime fecha conexões ociosas após esse tempo. Torna o pool
+	// elástico: cresce até MaxOpenConns sob carga e encolhe quando o tráfego
+	// cai, sem manter conexões abertas (e processos no Postgres) à toa.
+	ConnMaxIdleTime Duration `toml:"conn_max_idle_time"`
 }
 
 type Duration struct {
@@ -143,9 +176,10 @@ func defaults() *Config {
 		},
 		Database: DatabaseConfig{
 			URL:             "postgres://localhost:5432/gah?sslmode=disable",
-			MaxOpenConns:    25,
-			MaxIdleConns:    10,
+			MaxOpenConns:    50,
+			MaxIdleConns:    25,
 			ConnMaxLifetime: Duration{5 * time.Minute},
+			ConnMaxIdleTime: Duration{90 * time.Second},
 		},
 		Auth: AuthConfig{
 			JWTSecret:      "change-me-in-production",
@@ -177,6 +211,16 @@ func defaults() *Config {
 			FCMBaseURL:         "",
 			FCMCredentialsFile: "",
 			FCMProjectID:       "",
+		},
+		Observability: ObservabilityConfig{
+			Enabled:        false,
+			ServiceName:    "", // vazio => cada binário define (gah-api / gah-worker)
+			ServiceVersion: "",
+			Environment:    "dev",
+			OTLPEndpoint:   "localhost:4317",
+			SampleRatio:    1.0,
+			Insecure:       true,
+			LogLevel:       "info",
 		},
 	}
 }
@@ -225,6 +269,12 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DB_CONN_MAX_LIFETIME"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Database.ConnMaxLifetime = Duration{d}
+		}
+	}
+
+	if v := os.Getenv("DB_CONN_MAX_IDLE_TIME"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Database.ConnMaxIdleTime = Duration{d}
 		}
 	}
 
@@ -313,5 +363,36 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("FCM_PROJECT_ID"); v != "" {
 		cfg.Notifications.FCMProjectID = v
+	}
+
+	if v := os.Getenv("OBSERVABILITY_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Observability.Enabled = b
+		}
+	}
+	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
+		cfg.Observability.ServiceName = v
+	}
+	if v := os.Getenv("OTEL_SERVICE_VERSION"); v != "" {
+		cfg.Observability.ServiceVersion = v
+	}
+	if v := os.Getenv("DD_ENV"); v != "" {
+		cfg.Observability.Environment = v
+	}
+	if v := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" {
+		cfg.Observability.OTLPEndpoint = v
+	}
+	if v := os.Getenv("OTEL_TRACES_SAMPLER_ARG"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Observability.SampleRatio = f
+		}
+	}
+	if v := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Observability.Insecure = b
+		}
+	}
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		cfg.Observability.LogLevel = v
 	}
 }

@@ -24,8 +24,14 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.URL != "postgres://localhost:5432/gah?sslmode=disable" {
 		t.Errorf("database url = %q, want default", cfg.Database.URL)
 	}
-	if cfg.Database.MaxOpenConns != 25 {
-		t.Errorf("max_open_conns = %d, want 25", cfg.Database.MaxOpenConns)
+	if cfg.Database.MaxOpenConns != 50 {
+		t.Errorf("max_open_conns = %d, want 50", cfg.Database.MaxOpenConns)
+	}
+	if cfg.Database.MaxIdleConns != 25 {
+		t.Errorf("max_idle_conns = %d, want 25", cfg.Database.MaxIdleConns)
+	}
+	if cfg.Database.ConnMaxIdleTime.Duration != 90*time.Second {
+		t.Errorf("conn_max_idle_time = %v, want 90s", cfg.Database.ConnMaxIdleTime)
 	}
 	if cfg.Auth.JWTSecret != "change-me-in-production" {
 		t.Errorf("jwt_secret = %q, want default", cfg.Auth.JWTSecret)
@@ -532,8 +538,8 @@ func TestLoad_InvalidEnvIgnored(t *testing.T) {
 	if cfg.Server.Port != 8080 {
 		t.Errorf("port = %d, want 8080 (default when env invalid)", cfg.Server.Port)
 	}
-	if cfg.Database.MaxOpenConns != 25 {
-		t.Errorf("max_open_conns = %d, want 25", cfg.Database.MaxOpenConns)
+	if cfg.Database.MaxOpenConns != 50 {
+		t.Errorf("max_open_conns = %d, want 50 (default when env invalid)", cfg.Database.MaxOpenConns)
 	}
 	if cfg.Server.ReadTimeout.Duration != 15*time.Second {
 		t.Errorf("read_timeout = %v, want 15s", cfg.Server.ReadTimeout)

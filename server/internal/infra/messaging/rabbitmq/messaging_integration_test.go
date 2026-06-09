@@ -56,12 +56,11 @@ func TestIntegration_RabbitMQ_PublishConsumeRoundTrip(t *testing.T) {
 	// Dá um tempo para o consumidor declarar/bindar a fila antes de publicar.
 	time.Sleep(500 * time.Millisecond)
 
-	// O Publisher publica o JSON do PAYLOAD como corpo e usa event.Type como
-	// routing key. O payload aqui é o envelope port.Event completo (mesmo
-	// contrato dos handlers reais, ex.: RawActivityHandler via decodePayload),
-	// de modo que Type/Payload sobrevivam ao decode no consumidor.
-	inner := port.Event{Type: eventType, Payload: map[string]any{"user_id": "u-123", "value": 62.0}}
-	if err := pub.Publish(ctx, port.Event{Type: eventType, Payload: inner}); err != nil {
+	// O Publisher serializa o envelope port.Event completo como corpo e usa
+	// event.Type como routing key, de modo que Type/Payload sobrevivam ao decode
+	// no consumidor (mesmo contrato dos handlers reais, ex.: RawActivityHandler
+	// via decodePayload).
+	if err := pub.Publish(ctx, port.Event{Type: eventType, Payload: map[string]any{"user_id": "u-123", "value": 62.0}}); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 

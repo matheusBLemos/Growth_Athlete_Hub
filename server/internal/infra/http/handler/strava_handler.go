@@ -75,12 +75,12 @@ func (h *StravaHandler) Callback(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "invalid state")
 	}
 
-	if err := h.connect.HandleCallback(c.Context(), usecase.HandleCallbackInput{UserID: userID, Code: code}); err != nil {
+	if err := h.connect.HandleCallback(c.UserContext(), usecase.HandleCallbackInput{UserID: userID, Code: code}); err != nil {
 		return writeError(c, fiber.StatusBadGateway, "failed to connect provider")
 	}
 
 	// Dispara um sync inicial best-effort; falhas não invalidam a conexão.
-	_, _ = h.sync.Execute(c.Context(), usecase.SyncProviderActivitiesInput{UserID: userID, Provider: h.connect.Provider()})
+	_, _ = h.sync.Execute(c.UserContext(), usecase.SyncProviderActivitiesInput{UserID: userID, Provider: h.connect.Provider()})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "connected", "provider": h.connect.Provider()})
 }
@@ -92,7 +92,7 @@ func (h *StravaHandler) Sync(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	out, err := h.sync.Execute(c.Context(), usecase.SyncProviderActivitiesInput{UserID: userID, Provider: h.connect.Provider()})
+	out, err := h.sync.Execute(c.UserContext(), usecase.SyncProviderActivitiesInput{UserID: userID, Provider: h.connect.Provider()})
 	if err != nil {
 		if errors.Is(err, usecase.ErrProviderNotConnected) {
 			return writeError(c, fiber.StatusBadRequest, "strava not connected")
@@ -131,7 +131,7 @@ func (h *StravaHandler) WebhookEvent(c *fiber.Ctx) error {
 	}
 
 	if ev.ObjectType == "activity" && (ev.AspectType == "create" || ev.AspectType == "update") {
-		_ = h.publisher.Publish(c.Context(), port.Event{
+		_ = h.publisher.Publish(c.UserContext(), port.Event{
 			Type: StravaWebhookEventType,
 			Payload: fiber.Map{
 				"provider":    "strava",

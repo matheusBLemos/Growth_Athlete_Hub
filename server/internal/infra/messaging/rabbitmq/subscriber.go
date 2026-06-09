@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
 )
@@ -37,6 +40,7 @@ func (h HandlerFunc) Handle(ctx context.Context, event port.Event) error {
 type delivery interface {
 	Body() []byte
 	RoutingKey() string
+	Headers() amqp.Table
 	Ack() error
 	Nack(requeue bool) error
 }
@@ -46,9 +50,10 @@ type amqpDelivery struct {
 	d amqp.Delivery
 }
 
-func (a amqpDelivery) Body() []byte       { return a.d.Body }
-func (a amqpDelivery) RoutingKey() string { return a.d.RoutingKey }
-func (a amqpDelivery) Ack() error         { return a.d.Ack(false) }
+func (a amqpDelivery) Body() []byte        { return a.d.Body }
+func (a amqpDelivery) RoutingKey() string  { return a.d.RoutingKey }
+func (a amqpDelivery) Headers() amqp.Table { return a.d.Headers }
+func (a amqpDelivery) Ack() error          { return a.d.Ack(false) }
 func (a amqpDelivery) Nack(requeue bool) error {
 	return a.d.Nack(false, requeue)
 }
@@ -206,16 +211,34 @@ func (s *Subscriber) consume(ctx context.Context, handler MessageHandler, delive
 // falha de decode ou de processamento. Mantida pequena e sem dependência de
 // AMQP vivo para ser testada com entregas falsas.
 func (s *Subscriber) dispatch(ctx context.Context, handler MessageHandler, d delivery) {
+	// Continua o trace distribuído iniciado no publisher: extrai o contexto dos
+	// headers e abre um span de consumer. Com a telemetria off, é no-op.
+	ctx = extractTrace(ctx, d.Headers())
+	ctx, span := otel.Tracer(tracerName).Start(ctx, d.RoutingKey()+" process",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			semconv.MessagingSystemRabbitmq,
+			semconv.MessagingDestinationName(s.exchange),
+		),
+	)
+	defer span.End()
+
+	logger := port.LoggerFromContext(ctx)
+
 	var event port.Event
 	if err := json.Unmarshal(d.Body(), &event); err != nil {
 		// Mensagem malformada nunca vai melhorar com requeue -> dead-letter.
-		log.Printf("rabbitmq: decode delivery (key=%s): %v", d.RoutingKey(), err)
+		logger.Error(ctx, "rabbitmq: decode delivery failed", "routing_key", d.RoutingKey(), "error", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "decode failed")
 		_ = d.Nack(false)
 		return
 	}
 
 	if err := handler.Handle(ctx, event); err != nil {
-		log.Printf("rabbitmq: handle event %q: %v", event.Type, err)
+		logger.Error(ctx, "rabbitmq: handle event failed", "event", event.Type, "error", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "handler failed")
 		// Sem requeue: roteia para a DLX para inspeção/retry controlado,
 		// evitando loop de reprocessamento de mensagens "envenenadas".
 		_ = d.Nack(false)
@@ -223,7 +246,8 @@ func (s *Subscriber) dispatch(ctx context.Context, handler MessageHandler, d del
 	}
 
 	if err := d.Ack(); err != nil {
-		log.Printf("rabbitmq: ack event %q: %v", event.Type, err)
+		logger.Error(ctx, "rabbitmq: ack event failed", "event", event.Type, "error", err)
+		span.RecordError(err)
 	}
 }
 

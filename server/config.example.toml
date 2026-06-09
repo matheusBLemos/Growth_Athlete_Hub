@@ -6,9 +6,12 @@ idle_timeout = "60s"
 
 [database]
 url = "postgres://localhost:5432/gah?sslmode=disable"
-max_open_conns = 25
-max_idle_conns = 10
-conn_max_lifetime = "5m"
+# Pool elástico: cresce até max_open_conns sob carga e libera conexões ociosas
+# após conn_max_idle_time, sem manter processos no Postgres à toa.
+max_open_conns = 50        # DB_MAX_OPEN_CONNS (respeite o max_connections do Postgres)
+max_idle_conns = 25        # DB_MAX_IDLE_CONNS
+conn_max_lifetime = "5m"   # DB_CONN_MAX_LIFETIME (reciclagem da conexão)
+conn_max_idle_time = "90s" # DB_CONN_MAX_IDLE_TIME (fecha conexões ociosas)
 
 [auth]
 # Segredo usado para assinar tokens JWT (HS256). Sobrescreva via AUTH_JWT_SECRET.
@@ -63,3 +66,25 @@ fcm_base_url = ""
 fcm_credentials_file = ""
 # ID do projeto Firebase/GCP. Sobrescreva via FCM_PROJECT_ID.
 fcm_project_id = ""
+
+[observability]
+# Telemetria OpenTelemetry (traces + métricas) + logs estruturados JSON.
+# Com enabled=false a aplicação roda sem nenhum exportador/agent (dev/testes).
+# Liga via OBSERVABILITY_ENABLED=true.
+enabled = false
+# Nome do serviço no backend. Vazio => cada binário define o seu (gah-api /
+# gah-worker). Sobrescreva via OTEL_SERVICE_NAME.
+service_name = ""
+# Versão/build do binário (ex.: git SHA). Sobrescreva via OTEL_SERVICE_VERSION.
+service_version = ""
+# Ambiente de deploy (dev|staging|prod). Sobrescreva via DD_ENV.
+environment = "dev"
+# Endpoint OTLP/gRPC do collector (Datadog Agent). Formato host:porta, sem scheme.
+# Sobrescreva via OTEL_EXPORTER_OTLP_ENDPOINT (ex.: "datadog-agent:4317").
+otlp_endpoint = "localhost:4317"
+# Fração de traces amostrados (0.0–1.0). Sobrescreva via OTEL_TRACES_SAMPLER_ARG.
+sample_ratio = 1.0
+# gRPC sem TLS (padrão para agent local). Sobrescreva via OTEL_EXPORTER_OTLP_INSECURE.
+insecure = true
+# Nível mínimo de log estruturado (debug|info|warn|error). Sobrescreva via LOG_LEVEL.
+log_level = "info"
