@@ -17,3 +17,13 @@ jwt_secret = "change-me-in-production"
 token_ttl = "24h"
 # Pepper aplicado ao hash Argon2id da senha. Sobrescreva via AUTH_PASSWORD_PEPPER.
 password_pepper = ""
+
+[messaging]
+# Connection string AMQP do RabbitMQ. Sobrescreva via RABBITMQ_URL.
+url = "amqp://gah:gah@localhost:5672/"
+# Topic exchange onde os eventos são publicados. Sobrescreva via RABBITMQ_EXCHANGE.
+exchange = "gah.events"
+# Prefixo das filas declaradas pelos consumidores. Sobrescreva via RABBITMQ_QUEUE_PREFIX.
+queue_prefix = "gah"
+# Limite de mensagens não confirmadas por consumidor (QoS). Sobrescreva via RABBITMQ_PREFETCH.
+prefetch = 10

@@ -13,6 +13,7 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
 
 	router "github.com/Growth-Athlete-Hub/gah-server/internal/infra/http"
@@ -50,7 +51,11 @@ func main() {
 		deterministic.NewRecoveryRule(),
 	)
 
-	publisher := &noopEventPublisher{}
+	publisher, err := rabbitmq.NewPublisher(cfg.Messaging.URL, cfg.Messaging.Exchange)
+	if err != nil {
+		log.Fatalf("failed to connect to rabbitmq: %v", err)
+	}
+	defer publisher.Close()
 
 	registerActivity := usecase.NewRegisterActivity(activityRepo, publisher)
 	recordMetric := usecase.NewRecordMetric(metricRepo, publisher)

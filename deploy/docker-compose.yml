@@ -35,6 +35,23 @@ services:
       timeout: 3s
       retries: 10
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: gah-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: gah
+      RABBITMQ_DEFAULT_PASS: gah
+    ports:
+      - "5672:5672"   # AMQP — exposto p/ o `go run` no host alcançar o broker
+      - "15672:15672" # UI de management (http://localhost:15672, gah/gah)
+    volumes:
+      - gah_rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   server:
     build:
       context: ../server
@@ -43,12 +60,34 @@ services:
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
+      RABBITMQ_URL: amqp://gah:gah@rabbitmq:5672/
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+      target: build
+    container_name: gah-worker
+    # A imagem runtime só empacota o binário da API; para o worker compilamos e
+    # rodamos a partir do estágio de build (Go puro, sem dependências de C).
+    command: ["go", "run", "./cmd/worker"]
+    working_dir: /src
+    environment:
+      DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
+      RABBITMQ_URL: amqp://gah:gah@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   gah_pgdata:
+  gah_rabbitmqdata:
