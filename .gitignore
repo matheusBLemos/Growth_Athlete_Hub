@@ -47,5 +47,9 @@ Thumbs.db
 # manual tests
 manual_tests/
 
+# Config (keep .example, ignore real config)
+server/config.toml
+!server/config.example.toml
+
 # Build output
 bin/
