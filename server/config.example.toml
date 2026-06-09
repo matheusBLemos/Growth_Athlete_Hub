@@ -27,3 +27,13 @@ exchange = "gah.events"
 queue_prefix = "gah"
 # Limite de mensagens não confirmadas por consumidor (QoS). Sobrescreva via RABBITMQ_PREFETCH.
 prefetch = 10
+
+[redis]
+# Endereço host:porta do Redis (cache de leitura de métricas). Sobrescreva via REDIS_ADDR.
+addr = "localhost:6379"
+# Senha do Redis (vazio = sem auth). Sobrescreva via REDIS_PASSWORD.
+password = ""
+# Índice do banco lógico do Redis. Sobrescreva via REDIS_DB.
+db = 0
+# TTL das entradas de cache do caminho de leitura de métricas. Sobrescreva via REDIS_METRICS_TTL.
+metrics_ttl = "5m"

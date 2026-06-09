@@ -41,8 +41,8 @@ func newHandlerMocks() handlerMocks {
 
 	return handlerMocks{
 		registerActivity: usecase.NewRegisterActivity(actRepo, pub),
-		recordMetric:     usecase.NewRecordMetric(metRepo, pub),
-		queryMetrics:     usecase.NewQueryMetrics(metRepo),
+		recordMetric:     usecase.NewRecordMetric(metRepo, pub, nil, 0),
+		queryMetrics:     usecase.NewQueryMetrics(metRepo, nil, 0),
 		generateInsights: usecase.NewGenerateInsights(metRepo, insRepo, eval),
 		registerUser:     usecase.NewRegisterUser(userRepo, hasher, pub),
 		loginUser:        usecase.NewLoginUser(userRepo, hasher, issuer),
