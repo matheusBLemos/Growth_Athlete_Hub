@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -64,8 +63,11 @@ func (uc *RegisterActivity) Execute(ctx context.Context, input RegisterActivityI
 		Type:    "activity.registered",
 		Payload: activity,
 	}); err != nil {
-		log.Printf("failed to publish activity.registered event: %v", err)
+		port.LoggerFromContext(ctx).Error(ctx, "failed to publish activity.registered event",
+			"event", "activity.registered", "activity_id", activity.ID, "error", err)
 	}
+
+	port.MetricsFromContext(ctx).IncCounter(ctx, "gah.activities.registered", 1, "type", input.ActivityType)
 
 	return &RegisterActivityOutput{ID: activity.ID}, nil
 }

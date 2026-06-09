@@ -16,6 +16,9 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability/logging"
+	obsmetrics "github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability/metrics"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
 
 	router "github.com/Growth-Athlete-Hub/gah-server/internal/infra/http"
@@ -27,9 +30,38 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	// Logger estruturado (JSON em stdout) usado por toda a aplicação.
+	logger := logging.New(os.Stdout, logging.ParseLevel(cfg.Observability.LogLevel))
+	ctx := context.Background()
+
+	// fatal loga o erro de boot de forma estruturada e encerra o processo.
+	fatal := func(msg string, err error) {
+		logger.Error(ctx, msg, "error", err)
+		os.Exit(1)
+	}
+
+	// Telemetria OpenTelemetry (traces + métricas). No-op quando desabilitada.
+	obsCfg := observability.Config{
+		Enabled:        cfg.Observability.Enabled,
+		ServiceName:    observability.ServiceName(cfg.Observability.ServiceName, "gah-api"),
+		ServiceVersion: cfg.Observability.ServiceVersion,
+		Environment:    cfg.Observability.Environment,
+		OTLPEndpoint:   cfg.Observability.OTLPEndpoint,
+		SampleRatio:    cfg.Observability.SampleRatio,
+		Insecure:       cfg.Observability.Insecure,
+	}
+	shutdownObs, err := observability.Setup(ctx, obsCfg)
+	if err != nil {
+		fatal("failed to set up observability", err)
+	}
+	defer func() { _ = shutdownObs(context.Background()) }()
+
+	// Criado após o Setup para capturar o meter global já configurado.
+	metrics := obsmetrics.New()
+
 	db, err := postgres.NewDB(cfg.Database.URL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		fatal("failed to connect to database", err)
 	}
 	defer db.Close()
 
@@ -40,7 +72,7 @@ func main() {
 	// Auto-migração no boot: aplica as migrations embutidas (rastreadas em
 	// schema_migrations) antes de servir. Idempotente.
 	if err := postgres.Migrate(db); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		fatal("failed to run migrations", err)
 	}
 
 	activityRepo := postgres.NewActivityRepository(db)
@@ -64,7 +96,7 @@ func main() {
 
 	publisher, err := rabbitmq.NewPublisher(cfg.Messaging.URL, cfg.Messaging.Exchange)
 	if err != nil {
-		log.Fatalf("failed to connect to rabbitmq: %v", err)
+		fatal("failed to connect to rabbitmq", err)
 	}
 	defer publisher.Close()
 
@@ -74,10 +106,10 @@ func main() {
 		DB:       cfg.Redis.DB,
 	})
 	if err != nil {
-		log.Fatalf("failed to create redis cache: %v", err)
+		fatal("failed to create redis cache", err)
 	}
 	if err := cache.Ping(context.Background()); err != nil {
-		log.Fatalf("failed to connect to redis: %v", err)
+		fatal("failed to connect to redis", err)
 	}
 	defer cache.Close()
 
@@ -115,14 +147,16 @@ func main() {
 			WriteTimeout: cfg.Server.WriteTimeout.Duration,
 			IdleTimeout:  cfg.Server.IdleTimeout.Duration,
 		},
+		logger,
+		metrics,
 		tokenIssuer,
 		authHandler, activityHandler, metricHandler, insightHandler, stravaHandler, deviceHandler, notificationHandler,
 	)
 
 	go func() {
-		fmt.Printf("GAH Server starting on :%d\n", cfg.Server.Port)
+		logger.Info(ctx, "GAH Server starting", "port", cfg.Server.Port)
 		if err := app.Listen(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil {
-			log.Fatalf("server error: %v", err)
+			fatal("server error", err)
 		}
 	}()
 
@@ -130,12 +164,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout.Duration)
+	logger.Info(ctx, "shutting down server...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout.Duration)
 	defer cancel()
 
-	if err := app.ShutdownWithContext(ctx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+	if err := app.ShutdownWithContext(shutdownCtx); err != nil {
+		fatal("server forced to shutdown", err)
 	}
-	log.Println("server stopped")
+	logger.Info(ctx, "server stopped")
 }

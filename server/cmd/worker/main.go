@@ -22,6 +22,9 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/notifications"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability/logging"
+	obsmetrics "github.com/Growth-Athlete-Hub/gah-server/internal/infra/observability/metrics"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/processing"
 )
@@ -32,9 +35,35 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	logger := logging.New(os.Stdout, logging.ParseLevel(cfg.Observability.LogLevel))
+	baseCtx := context.Background()
+
+	fatal := func(msg string, err error) {
+		logger.Error(baseCtx, msg, "error", err)
+		os.Exit(1)
+	}
+
+	// Telemetria OpenTelemetry (traces + métricas). No-op quando desabilitada.
+	shutdownObs, err := observability.Setup(baseCtx, observability.Config{
+		Enabled:        cfg.Observability.Enabled,
+		ServiceName:    observability.ServiceName(cfg.Observability.ServiceName, "gah-worker"),
+		ServiceVersion: cfg.Observability.ServiceVersion,
+		Environment:    cfg.Observability.Environment,
+		OTLPEndpoint:   cfg.Observability.OTLPEndpoint,
+		SampleRatio:    cfg.Observability.SampleRatio,
+		Insecure:       cfg.Observability.Insecure,
+	})
+	if err != nil {
+		fatal("failed to set up observability", err)
+	}
+	defer func() { _ = shutdownObs(context.Background()) }()
+
+	// Criado após o Setup para capturar o meter global já configurado.
+	metrics := obsmetrics.New()
+
 	db, err := postgres.NewDB(cfg.Database.URL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		fatal("failed to connect to database", err)
 	}
 	defer db.Close()
 
@@ -45,14 +74,14 @@ func main() {
 	// Auto-migração no boot: aplica as migrations embutidas (rastreadas em
 	// schema_migrations) antes de consumir eventos. Idempotente.
 	if err := postgres.Migrate(db); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		fatal("failed to run migrations", err)
 	}
 
 	// O worker publica eventos derivados (ex.: insight.generated), reusando o
 	// mesmo topic exchange da API.
 	publisher, err := rabbitmq.NewPublisher(cfg.Messaging.URL, cfg.Messaging.Exchange)
 	if err != nil {
-		log.Fatalf("failed to connect to rabbitmq (publisher): %v", err)
+		fatal("failed to connect to rabbitmq (publisher)", err)
 	}
 	defer publisher.Close()
 
@@ -63,19 +92,23 @@ func main() {
 		cfg.Messaging.Prefetch,
 	)
 	if err != nil {
-		log.Fatalf("failed to connect to rabbitmq (subscriber): %v", err)
+		fatal("failed to connect to rabbitmq (subscriber)", err)
 	}
 	defer subscriber.Close()
 
-	registerHandlers(subscriber, db, publisher, cfg.Notifications, cfg.Connectors.Strava)
+	registerHandlers(subscriber, db, publisher, logger, cfg.Notifications, cfg.Connectors.Strava)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Injeta Logger e Metrics no contexto base: cada delivery deriva dele, então
+	// os logs do consumo saem correlacionados ao span e os use cases publicam
+	// suas métricas de negócio também no caminho assíncrono.
+	obsCtx := port.ContextWithMetrics(port.ContextWithLogger(baseCtx, logger), metrics)
+	ctx, cancel := context.WithCancel(obsCtx)
 	defer cancel()
 
 	go func() {
-		log.Println("GAH Worker starting, consuming events...")
+		logger.Info(ctx, "GAH Worker starting, consuming events...")
 		if err := subscriber.Start(ctx); err != nil {
-			log.Fatalf("worker error: %v", err)
+			fatal("worker error", err)
 		}
 	}()
 
@@ -83,9 +116,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down worker...")
+	logger.Info(ctx, "shutting down worker...")
 	cancel()
-	log.Println("worker stopped")
+	logger.Info(ctx, "worker stopped")
 }
 
 // registerHandlers monta as use cases do pipeline de processamento e registra
@@ -94,7 +127,7 @@ func main() {
 // O módulo de Processamento reusa RegisterActivity (persistência + dedup por
 // external_id) e GenerateInsights, e roda a agregação diária — exatamente as
 // use cases da API, evitando duplicação de lógica.
-func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher, notifyCfg config.NotificationsConfig, stravaCfg config.StravaConfig) {
+func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher, logger port.Logger, notifyCfg config.NotificationsConfig, stravaCfg config.StravaConfig) {
 	activityRepo := postgres.NewActivityRepository(db)
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)
@@ -122,7 +155,7 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 	// Módulo de Notificações: consome insight.generated e dispara push para os
 	// dispositivos do usuário. Usa o FCMNotifier quando há server key
 	// configurada; caso contrário cai no LogNotifier (stub seguro, sem rede).
-	notifier := buildNotifier(notifyCfg)
+	notifier := buildNotifier(logger, notifyCfg)
 	notifyInsight := usecase.NewNotifyInsight(deviceRepo, notifier).WithHistory(notificationRepo)
 	subscriber.Register(notifications.NewInsightNotificationHandler(notifyInsight))
 
@@ -145,20 +178,21 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 // (HTTP v1) quando provider="fcm" e há credentials file + project id; caso
 // contrário o LogNotifier (stub seguro, sem chamada externa). Falha ao montar o
 // token source da service-account também cai no LogNotifier.
-func buildNotifier(cfg config.NotificationsConfig) port.Notifier {
+func buildNotifier(logger port.Logger, cfg config.NotificationsConfig) port.Notifier {
+	ctx := context.Background()
 	if cfg.Provider == "fcm" && cfg.FCMCredentialsFile != "" && cfg.FCMProjectID != "" {
-		ts, err := notifications.NewServiceAccountTokenSource(context.Background(), cfg.FCMCredentialsFile)
+		ts, err := notifications.NewServiceAccountTokenSource(ctx, cfg.FCMCredentialsFile)
 		if err != nil {
-			log.Printf("notifications: failed to load FCM credentials (%v); falling back to log notifier", err)
+			logger.Warn(ctx, "notifications: failed to load FCM credentials; falling back to log notifier", "error", err)
 			return notifications.NewLogNotifier()
 		}
-		log.Println("notifications: using FCM HTTP v1 push notifier")
+		logger.Info(ctx, "notifications: using FCM HTTP v1 push notifier")
 		return notifications.NewFCMNotifier(notifications.FCMConfig{
 			BaseURL:     cfg.FCMBaseURL,
 			ProjectID:   cfg.FCMProjectID,
 			TokenSource: ts,
 		})
 	}
-	log.Println("notifications: using log notifier (no push provider configured)")
+	logger.Info(ctx, "notifications: using log notifier (no push provider configured)")
 	return notifications.NewLogNotifier()
 }

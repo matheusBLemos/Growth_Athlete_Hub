@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -67,7 +66,8 @@ func (uc *RegisterUser) Execute(ctx context.Context, input RegisterUserInput) (*
 		Type:    "user.registered",
 		Payload: user,
 	}); err != nil {
-		log.Printf("failed to publish user.registered event: %v", err)
+		port.LoggerFromContext(ctx).Error(ctx, "failed to publish user.registered event",
+			"event", "user.registered", "user_id", user.ID, "error", err)
 	}
 
 	return &RegisterUserOutput{ID: user.ID}, nil

@@ -3,8 +3,8 @@ package http
 import (
 	"time"
 
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -22,6 +22,8 @@ type ServerConfig struct {
 
 func NewRouter(
 	cfg ServerConfig,
+	logger port.Logger,
+	metrics port.Metrics,
 	tokenIssuer port.TokenIssuer,
 	authHandler *handler.AuthHandler,
 	activityHandler *handler.ActivityHandler,
@@ -39,7 +41,11 @@ func NewRouter(
 	})
 
 	app.Use(recover.New())
-	app.Use(logger.New())
+	// Tracing primeiro: cria o span do request e o injeta no UserContext.
+	app.Use(otelfiber.Middleware())
+	// Logging estruturado em seguida: injeta o Logger no contexto (para use
+	// cases) e loga cada request já correlacionada ao span criado acima.
+	app.Use(middleware.RequestLogger(logger, metrics))
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})

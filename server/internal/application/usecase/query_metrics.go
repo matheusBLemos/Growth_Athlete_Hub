@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -57,13 +56,15 @@ func (uc *QueryMetrics) Execute(ctx context.Context, input QueryMetricsInput) (*
 		key = metricsQueryKey(input.UserID, ver, string(mt), input.From, input.To)
 
 		if raw, hit, gerr := uc.cache.Get(ctx, key); gerr != nil {
-			log.Printf("query_metrics: cache get error (falling back to repo): %v", gerr)
+			port.LoggerFromContext(ctx).Warn(ctx, "query_metrics: cache get error (falling back to repo)",
+				"user_id", input.UserID, "error", gerr)
 		} else if hit {
 			var metrics []*entity.Metric
 			if uerr := json.Unmarshal(raw, &metrics); uerr == nil {
 				return &QueryMetricsOutput{Metrics: metrics}, nil
 			}
-			log.Printf("query_metrics: cache unmarshal error (falling back to repo)")
+			port.LoggerFromContext(ctx).Warn(ctx, "query_metrics: cache unmarshal error (falling back to repo)",
+				"user_id", input.UserID)
 		}
 	}
 
@@ -75,7 +76,8 @@ func (uc *QueryMetrics) Execute(ctx context.Context, input QueryMetricsInput) (*
 	if uc.cache != nil {
 		if raw, merr := json.Marshal(metrics); merr == nil {
 			if serr := uc.cache.Set(ctx, key, raw, uc.cacheTTL); serr != nil {
-				log.Printf("query_metrics: cache set error (ignored): %v", serr)
+				port.LoggerFromContext(ctx).Warn(ctx, "query_metrics: cache set error (ignored)",
+					"user_id", input.UserID, "error", serr)
 			}
 		}
 	}

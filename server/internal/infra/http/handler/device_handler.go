@@ -36,7 +36,7 @@ func (h *DeviceHandler) Register(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusUnprocessableEntity, "token is required")
 	}
 
-	if err := h.devices.Save(c.Context(), userID, req.Token, req.Platform); err != nil {
+	if err := h.devices.Save(c.UserContext(), userID, req.Token, req.Platform); err != nil {
 		return writeError(c, fiber.StatusInternalServerError, "internal error")
 	}
 

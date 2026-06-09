@@ -40,7 +40,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "invalid birth_date format, use RFC3339")
 	}
 
-	output, err := h.registerUser.Execute(c.Context(), usecase.RegisterUserInput{
+	output, err := h.registerUser.Execute(c.UserContext(), usecase.RegisterUserInput{
 		Name:      req.Name,
 		Email:     req.Email,
 		Password:  req.Password,
@@ -73,7 +73,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
-	output, err := h.loginUser.Execute(c.Context(), usecase.LoginUserInput{
+	output, err := h.loginUser.Execute(c.UserContext(), usecase.LoginUserInput{
 		Email:    req.Email,
 		Password: req.Password,
 	})

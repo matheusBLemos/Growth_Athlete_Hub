@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -59,15 +58,19 @@ func (uc *RecordMetric) Execute(ctx context.Context, input RecordMetricInput) (*
 	// Invalida as queries cacheadas do usuário bumpando sua versão de cache.
 	// Erro de cache não falha a escrita (resiliência) — apenas logamos.
 	if err := bumpMetricsVersion(ctx, uc.cache, metric.UserID, uc.cacheTTL); err != nil {
-		log.Printf("record_metric: cache version bump error (ignored): %v", err)
+		port.LoggerFromContext(ctx).Warn(ctx, "record_metric: cache version bump error (ignored)",
+			"user_id", metric.UserID, "error", err)
 	}
 
 	if err := uc.publisher.Publish(ctx, port.Event{
 		Type:    "metric.recorded",
 		Payload: metric,
 	}); err != nil {
-		log.Printf("failed to publish metric.recorded event: %v", err)
+		port.LoggerFromContext(ctx).Error(ctx, "failed to publish metric.recorded event",
+			"event", "metric.recorded", "metric_id", metric.ID, "error", err)
 	}
+
+	port.MetricsFromContext(ctx).IncCounter(ctx, "gah.metrics.recorded", 1, "type", input.MetricType)
 
 	return &RecordMetricOutput{ID: metric.ID}, nil
 }

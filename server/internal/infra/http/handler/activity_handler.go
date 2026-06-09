@@ -49,7 +49,7 @@ func (h *ActivityHandler) Register(c *fiber.Ctx) error {
 		ExternalID:   req.ExternalID,
 	}
 
-	output, err := h.registerActivity.Execute(c.Context(), input)
+	output, err := h.registerActivity.Execute(c.UserContext(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidActivityType) ||
 			errors.Is(err, entity.ErrInvalidDuration) ||

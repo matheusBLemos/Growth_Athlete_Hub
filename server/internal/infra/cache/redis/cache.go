@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -39,6 +40,18 @@ func New(cfg Config) (*Cache, error) {
 		Password: cfg.Password,
 		DB:       cfg.DB,
 	})
+
+	// Instrumenta o cliente com tracing e métricas OpenTelemetry. Usa os
+	// providers globais (no-op quando a telemetria está desabilitada).
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("redis: instrument tracing: %w", err)
+	}
+	if err := redisotel.InstrumentMetrics(client); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("redis: instrument metrics: %w", err)
+	}
+
 	return &Cache{client: client}, nil
 }
 

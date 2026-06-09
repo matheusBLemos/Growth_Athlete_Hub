@@ -20,7 +20,7 @@ func NewInsightHandler(generate *usecase.GenerateInsights) *InsightHandler {
 func (h *InsightHandler) Generate(c *fiber.Ctx) error {
 	userID := userIDFromCtx(c)
 
-	output, err := h.generateInsights.Execute(c.Context(), usecase.GenerateInsightsInput{
+	output, err := h.generateInsights.Execute(c.UserContext(), usecase.GenerateInsightsInput{
 		UserID: userID,
 	})
 	if err != nil {

@@ -63,3 +63,25 @@ fcm_base_url = ""
 fcm_credentials_file = ""
 # ID do projeto Firebase/GCP. Sobrescreva via FCM_PROJECT_ID.
 fcm_project_id = ""
+
+[observability]
+# Telemetria OpenTelemetry (traces + métricas) + logs estruturados JSON.
+# Com enabled=false a aplicação roda sem nenhum exportador/agent (dev/testes).
+# Liga via OBSERVABILITY_ENABLED=true.
+enabled = false
+# Nome do serviço no backend. Vazio => cada binário define o seu (gah-api /
+# gah-worker). Sobrescreva via OTEL_SERVICE_NAME.
+service_name = ""
+# Versão/build do binário (ex.: git SHA). Sobrescreva via OTEL_SERVICE_VERSION.
+service_version = ""
+# Ambiente de deploy (dev|staging|prod). Sobrescreva via DD_ENV.
+environment = "dev"
+# Endpoint OTLP/gRPC do collector (Datadog Agent). Formato host:porta, sem scheme.
+# Sobrescreva via OTEL_EXPORTER_OTLP_ENDPOINT (ex.: "datadog-agent:4317").
+otlp_endpoint = "localhost:4317"
+# Fração de traces amostrados (0.0–1.0). Sobrescreva via OTEL_TRACES_SAMPLER_ARG.
+sample_ratio = 1.0
+# gRPC sem TLS (padrão para agent local). Sobrescreva via OTEL_EXPORTER_OTLP_INSECURE.
+insecure = true
+# Nível mínimo de log estruturado (debug|info|warn|error). Sobrescreva via LOG_LEVEL.
+log_level = "info"

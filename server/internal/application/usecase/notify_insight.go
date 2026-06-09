@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -67,8 +66,12 @@ func (uc *NotifyInsight) Execute(ctx context.Context, insight InsightGenerated) 
 		sendErr := uc.notifier.Send(ctx, notif)
 		if sendErr != nil {
 			// Não aborta os demais: acumula e segue.
-			log.Printf("notify_insight: send to device (user=%s insight=%s): %v", insight.UserID, insight.InsightID, sendErr)
+			port.LoggerFromContext(ctx).Error(ctx, "notify_insight: send to device failed",
+				"user_id", insight.UserID, "insight_id", insight.InsightID, "error", sendErr)
+			port.MetricsFromContext(ctx).IncCounter(ctx, "gah.notifications.sent", 1, "status", "failed")
 			errs = append(errs, sendErr)
+		} else {
+			port.MetricsFromContext(ctx).IncCounter(ctx, "gah.notifications.sent", 1, "status", "ok")
 		}
 		uc.recordHistory(ctx, insight, title, sendErr)
 	}
@@ -99,7 +102,8 @@ func (uc *NotifyInsight) recordHistory(ctx context.Context, insight InsightGener
 		rec.Error = sendErr.Error()
 	}
 	if err := uc.history.Save(ctx, rec); err != nil {
-		log.Printf("notify_insight: persist history (user=%s insight=%s): %v", insight.UserID, insight.InsightID, err)
+		port.LoggerFromContext(ctx).Error(ctx, "notify_insight: persist history failed",
+			"user_id", insight.UserID, "insight_id", insight.InsightID, "error", err)
 	}
 }
 

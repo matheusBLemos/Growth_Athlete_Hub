@@ -49,7 +49,7 @@ func (h *MetricHandler) Record(c *fiber.Ctx) error {
 		Date:       date,
 	}
 
-	output, err := h.recordMetric.Execute(c.Context(), input)
+	output, err := h.recordMetric.Execute(c.UserContext(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidMetricType) ||
 			errors.Is(err, entity.ErrMetricOutOfRange) ||
@@ -89,7 +89,7 @@ func (h *MetricHandler) Query(c *fiber.Ctx) error {
 		To:         to,
 	}
 
-	output, err := h.queryMetrics.Execute(c.Context(), input)
+	output, err := h.queryMetrics.Execute(c.UserContext(), input)
 	if err != nil {
 		if errors.Is(err, valueobject.ErrInvalidMetricType) {
 			return writeError(c, fiber.StatusUnprocessableEntity, err.Error())

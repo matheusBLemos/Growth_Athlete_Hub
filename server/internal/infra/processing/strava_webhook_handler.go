@@ -3,7 +3,6 @@ package processing
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
@@ -70,7 +69,7 @@ func (h *StravaWebhookHandler) Handle(ctx context.Context, event port.Event) err
 
 	ownerID := anyToString(payload.OwnerID)
 	if ownerID == "" {
-		log.Printf("strava webhook: evento de atividade sem owner_id, ignorando")
+		port.LoggerFromContext(ctx).Warn(ctx, "strava webhook: evento de atividade sem owner_id, ignorando")
 		return nil
 	}
 
@@ -81,7 +80,7 @@ func (h *StravaWebhookHandler) Handle(ctx context.Context, event port.Event) err
 	if !found {
 		// Atleta desconhecido (ex.: nunca conectou pelo GAH). Ack para não
 		// reenviar infinitamente uma mensagem que nunca terá usuário.
-		log.Printf("strava webhook: athlete %s sem usuário GAH vinculado, ignorando", ownerID)
+		port.LoggerFromContext(ctx).Warn(ctx, "strava webhook: athlete sem usuário GAH vinculado, ignorando", "owner_id", ownerID)
 		return nil
 	}
 

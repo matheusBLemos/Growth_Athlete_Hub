@@ -79,6 +79,12 @@ services:
       DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
       RABBITMQ_URL: amqp://gah:gah@rabbitmq:5672/
       REDIS_ADDR: redis:6379
+      # Observabilidade (off por padrão). Ative com OBSERVABILITY_ENABLED=true e
+      # suba o profile "observability" (datadog-agent).
+      OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-datadog-agent:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      DD_ENV: ${DD_ENV:-dev}
     ports:
       - "8080:8080"
     depends_on:
@@ -103,10 +109,50 @@ services:
     environment:
       DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
       RABBITMQ_URL: amqp://gah:gah@rabbitmq:5672/
+      OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-datadog-agent:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      DD_ENV: ${DD_ENV:-dev}
     depends_on:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Datadog Agent — recebe traces/métricas via OTLP/gRPC (:4317) e coleta os
+  # logs dos containers, encaminhando tudo para a Datadog.
+  #
+  # Fica num profile "observability" para NÃO subir por padrão. Para ativar:
+  #   export DD_API_KEY=<sua-api-key>
+  #   docker compose -f deploy/docker-compose.yml --profile observability up --build
+  # e suba server/worker com OBSERVABILITY_ENABLED=true (ver abaixo).
+  #
+  # A porta 4317 é exposta no host para permitir exportar também a partir de um
+  # `go run` rodando fora do compose.
+  # ---------------------------------------------------------------------------
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: gah-datadog-agent
+    profiles: ["observability"]
+    environment:
+      # Defina DD_API_KEY no ambiente antes de subir o profile observability.
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_APM_ENABLED: "true"
+      # Receptor OTLP (gRPC + HTTP) para os serviços instrumentados.
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: "0.0.0.0:4317"
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: "0.0.0.0:4318"
+      # Coleta de logs de todos os containers (JSON estruturado vira log no DD).
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_CONTAINER_EXCLUDE: "name:gah-datadog-agent"
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
 
 volumes:
   gah_pgdata:
