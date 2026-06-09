@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -57,19 +56,18 @@ func main() {
 	metricHandler := handler.NewMetricHandler(recordMetric, queryMetrics)
 	insightHandler := handler.NewInsightHandler(generateInsights)
 
-	r := router.NewRouter(activityHandler, metricHandler, insightHandler)
-
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      r,
-		ReadTimeout:  cfg.Server.ReadTimeout.Duration,
-		WriteTimeout: cfg.Server.WriteTimeout.Duration,
-		IdleTimeout:  cfg.Server.IdleTimeout.Duration,
-	}
+	app := router.NewRouter(
+		router.ServerConfig{
+			ReadTimeout:  cfg.Server.ReadTimeout.Duration,
+			WriteTimeout: cfg.Server.WriteTimeout.Duration,
+			IdleTimeout:  cfg.Server.IdleTimeout.Duration,
+		},
+		activityHandler, metricHandler, insightHandler,
+	)
 
 	go func() {
 		fmt.Printf("GAH Server starting on :%d\n", cfg.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := app.Listen(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
@@ -82,7 +80,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout.Duration)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := app.ShutdownWithContext(ctx); err != nil {
 		log.Fatalf("server forced to shutdown: %v", err)
 	}
 	log.Println("server stopped")
