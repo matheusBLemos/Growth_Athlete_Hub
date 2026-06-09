@@ -113,6 +113,102 @@ func TestLoad_RedisEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_StravaDefaults(t *testing.T) {
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Connectors.Strava.RedirectURL != "http://localhost:8080/api/v1/connectors/strava/callback" {
+		t.Errorf("strava redirect_url = %q, want default", cfg.Connectors.Strava.RedirectURL)
+	}
+	if cfg.Connectors.Strava.WebhookVerifyToken != "change-me-webhook-token" {
+		t.Errorf("strava webhook_verify_token = %q, want default", cfg.Connectors.Strava.WebhookVerifyToken)
+	}
+}
+
+func TestLoad_StravaFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[connectors.strava]
+client_id = "12345"
+client_secret = "shh"
+redirect_url = "https://gah.app/cb"
+webhook_verify_token = "verify-me"
+auth_url = "https://strava.test/oauth/authorize"
+token_url = "https://strava.test/oauth/token"
+api_base_url = "https://strava.test"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := cfg.Connectors.Strava
+	if s.ClientID != "12345" {
+		t.Errorf("client_id = %q, want 12345", s.ClientID)
+	}
+	if s.ClientSecret != "shh" {
+		t.Errorf("client_secret = %q, want shh", s.ClientSecret)
+	}
+	if s.RedirectURL != "https://gah.app/cb" {
+		t.Errorf("redirect_url = %q", s.RedirectURL)
+	}
+	if s.WebhookVerifyToken != "verify-me" {
+		t.Errorf("webhook_verify_token = %q", s.WebhookVerifyToken)
+	}
+	if s.AuthURL != "https://strava.test/oauth/authorize" {
+		t.Errorf("auth_url = %q", s.AuthURL)
+	}
+	if s.TokenURL != "https://strava.test/oauth/token" {
+		t.Errorf("token_url = %q", s.TokenURL)
+	}
+	if s.APIBaseURL != "https://strava.test" {
+		t.Errorf("api_base_url = %q", s.APIBaseURL)
+	}
+}
+
+func TestLoad_StravaEnvOverrides(t *testing.T) {
+	t.Setenv("STRAVA_CLIENT_ID", "env-id")
+	t.Setenv("STRAVA_CLIENT_SECRET", "env-secret")
+	t.Setenv("STRAVA_REDIRECT_URL", "https://env.app/cb")
+	t.Setenv("STRAVA_WEBHOOK_VERIFY_TOKEN", "env-verify")
+	t.Setenv("STRAVA_AUTH_URL", "https://env.test/authorize")
+	t.Setenv("STRAVA_TOKEN_URL", "https://env.test/token")
+	t.Setenv("STRAVA_API_BASE_URL", "https://env.test")
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := cfg.Connectors.Strava
+	if s.ClientID != "env-id" {
+		t.Errorf("client_id = %q, want env-id", s.ClientID)
+	}
+	if s.ClientSecret != "env-secret" {
+		t.Errorf("client_secret = %q, want env-secret", s.ClientSecret)
+	}
+	if s.RedirectURL != "https://env.app/cb" {
+		t.Errorf("redirect_url = %q", s.RedirectURL)
+	}
+	if s.WebhookVerifyToken != "env-verify" {
+		t.Errorf("webhook_verify_token = %q", s.WebhookVerifyToken)
+	}
+	if s.AuthURL != "https://env.test/authorize" {
+		t.Errorf("auth_url = %q", s.AuthURL)
+	}
+	if s.TokenURL != "https://env.test/token" {
+		t.Errorf("token_url = %q", s.TokenURL)
+	}
+	if s.APIBaseURL != "https://env.test" {
+		t.Errorf("api_base_url = %q", s.APIBaseURL)
+	}
+}
+
 func TestLoad_MessagingFromTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

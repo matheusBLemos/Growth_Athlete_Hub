@@ -309,3 +309,77 @@ func (f *fakeCache) Delete(_ context.Context, keys ...string) error {
 }
 
 var _ port.Cache = (*fakeCache)(nil)
+
+// mockProviderGateway é um gateway de provedor externo controlável para testes.
+type mockProviderGateway struct {
+	provider        string
+	exchanged       port.ProviderToken
+	exchangeErr     error
+	refreshed       port.ProviderToken
+	refreshErr      error
+	refreshCalled   bool
+	activities      []port.ProviderActivity
+	fetchErr        error
+	usedAccessToken string
+}
+
+func (m *mockProviderGateway) AuthURL(state string) string {
+	return "https://provider.test/authorize?state=" + state
+}
+
+func (m *mockProviderGateway) ExchangeCode(_ context.Context, _ string) (port.ProviderToken, error) {
+	return m.exchanged, m.exchangeErr
+}
+
+func (m *mockProviderGateway) Refresh(_ context.Context, _ string) (port.ProviderToken, error) {
+	m.refreshCalled = true
+	return m.refreshed, m.refreshErr
+}
+
+func (m *mockProviderGateway) FetchActivities(_ context.Context, accessToken string, _ time.Time) ([]port.ProviderActivity, error) {
+	m.usedAccessToken = accessToken
+	if m.fetchErr != nil {
+		return nil, m.fetchErr
+	}
+	return m.activities, nil
+}
+
+func (m *mockProviderGateway) Provider() string {
+	if m.provider == "" {
+		return "strava"
+	}
+	return m.provider
+}
+
+var _ port.ProviderGateway = (*mockProviderGateway)(nil)
+
+// mockProviderTokenRepo é um repositório de tokens em memória; a chave é "userID:provider".
+type mockProviderTokenRepo struct {
+	tokens     map[string]*port.ProviderToken
+	saveCalled int
+	saveErr    error
+	findErr    error
+}
+
+func newMockProviderTokenRepo() *mockProviderTokenRepo {
+	return &mockProviderTokenRepo{tokens: make(map[string]*port.ProviderToken)}
+}
+
+func (m *mockProviderTokenRepo) Save(_ context.Context, userID string, token port.ProviderToken) error {
+	m.saveCalled++
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	t := token
+	m.tokens[userID+":"+token.Provider] = &t
+	return nil
+}
+
+func (m *mockProviderTokenRepo) Find(_ context.Context, userID, provider string) (*port.ProviderToken, error) {
+	if m.findErr != nil {
+		return nil, m.findErr
+	}
+	return m.tokens[userID+":"+provider], nil
+}
+
+var _ port.ProviderTokenRepository = (*mockProviderTokenRepo)(nil)

@@ -12,6 +12,7 @@ import (
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/auth"
 	rediscache "github.com/Growth-Athlete-Hub/gah-server/internal/infra/cache/redis"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/connectors/strava"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/http/handler"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
@@ -40,6 +41,7 @@ func main() {
 	metricRepo := postgres.NewMetricRepository(db)
 	insightRepo := postgres.NewInsightRepository(db)
 	userRepo := postgres.NewUserRepository(db)
+	providerTokenRepo := postgres.NewProviderTokenRepository(db)
 
 	hasher := auth.NewArgon2Hasher(cfg.Auth.PasswordPepper)
 	tokenIssuer := auth.NewJWTIssuer(cfg.Auth.JWTSecret, cfg.Auth.TokenTTL.Duration)
@@ -80,10 +82,22 @@ func main() {
 	registerUser := usecase.NewRegisterUser(userRepo, hasher, publisher)
 	loginUser := usecase.NewLoginUser(userRepo, hasher, tokenIssuer)
 
+	stravaGateway := strava.NewGateway(strava.Config{
+		ClientID:     cfg.Connectors.Strava.ClientID,
+		ClientSecret: cfg.Connectors.Strava.ClientSecret,
+		RedirectURL:  cfg.Connectors.Strava.RedirectURL,
+		AuthURL:      cfg.Connectors.Strava.AuthURL,
+		TokenURL:     cfg.Connectors.Strava.TokenURL,
+		APIBaseURL:   cfg.Connectors.Strava.APIBaseURL,
+	})
+	connectProvider := usecase.NewConnectProvider(stravaGateway, providerTokenRepo)
+	syncProvider := usecase.NewSyncProviderActivities(stravaGateway, providerTokenRepo, publisher)
+
 	authHandler := handler.NewAuthHandler(registerUser, loginUser)
 	activityHandler := handler.NewActivityHandler(registerActivity)
 	metricHandler := handler.NewMetricHandler(recordMetric, queryMetrics)
 	insightHandler := handler.NewInsightHandler(generateInsights)
+	stravaHandler := handler.NewStravaHandler(connectProvider, syncProvider, publisher, tokenIssuer, cfg.Connectors.Strava.WebhookVerifyToken)
 
 	app := router.NewRouter(
 		router.ServerConfig{
@@ -92,7 +106,7 @@ func main() {
 			IdleTimeout:  cfg.Server.IdleTimeout.Duration,
 		},
 		tokenIssuer,
-		authHandler, activityHandler, metricHandler, insightHandler,
+		authHandler, activityHandler, metricHandler, insightHandler, stravaHandler,
 	)
 
 	go func() {
