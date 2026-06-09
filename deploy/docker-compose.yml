@@ -1,0 +1,54 @@
+# =============================================================================
+# GAH — docker compose (desenvolvimento)
+# =============================================================================
+# Dois modos de uso:
+#
+#   1) Dev com go run (RECOMENDADO) — sobe só o Postgres e roda a app no host:
+#        docker compose -f deploy/docker-compose.yml up -d db
+#        cd server && DATABASE_URL=postgres://gah:gah@localhost:5432/gah?sslmode=disable make run
+#      (ou apenas `make run` se o seu config.toml já apontar p/ localhost:5432)
+#
+#   2) Stack completa em container — Postgres + servidor:
+#        docker compose -f deploy/docker-compose.yml up --build
+#
+# As migrations em server/migrations/ são aplicadas automaticamente na PRIMEIRA
+# inicialização do volume do Postgres (docker-entrypoint-initdb.d).
+# Para reaplicar do zero: `docker compose -f deploy/docker-compose.yml down -v`.
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gah-db
+    environment:
+      POSTGRES_USER: gah
+      POSTGRES_PASSWORD: gah
+      POSTGRES_DB: gah
+    ports:
+      - "5432:5432" # exposto p/ o `go run` no host alcançar o banco
+    volumes:
+      - gah_pgdata:/var/lib/postgresql/data
+      - ../server/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gah -d gah"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: gah-server
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://gah:gah@db:5432/gah?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  gah_pgdata:

@@ -1,0 +1,20 @@
+# Build output
+bin/
+*.out
+coverage.*
+
+# Config local (a app usa defaults + env no container)
+config.toml
+
+# Git / editor
+.git
+.idea/
+.vscode/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
