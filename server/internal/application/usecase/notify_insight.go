@@ -22,10 +22,20 @@ import (
 type NotifyInsight struct {
 	devices  port.DeviceRepository
 	notifier port.Notifier
+	// history persiste o histórico de envios. Opcional: nil desativa a
+	// persistência (mantém compatibilidade com wiring/testes existentes).
+	history port.NotificationRepository
 }
 
 func NewNotifyInsight(devices port.DeviceRepository, notifier port.Notifier) *NotifyInsight {
 	return &NotifyInsight{devices: devices, notifier: notifier}
+}
+
+// WithHistory injeta (opcionalmente) o repositório de histórico. Retorna a
+// própria use case para encadeamento na wiring. history nil é um no-op.
+func (uc *NotifyInsight) WithHistory(history port.NotificationRepository) *NotifyInsight {
+	uc.history = history
+	return uc
 }
 
 func (uc *NotifyInsight) Execute(ctx context.Context, insight InsightGenerated) error {
@@ -54,17 +64,43 @@ func (uc *NotifyInsight) Execute(ctx context.Context, insight InsightGenerated) 
 			Body:   insight.Message,
 			Data:   data,
 		}
-		if err := uc.notifier.Send(ctx, notif); err != nil {
+		sendErr := uc.notifier.Send(ctx, notif)
+		if sendErr != nil {
 			// Não aborta os demais: acumula e segue.
-			log.Printf("notify_insight: send to device (user=%s insight=%s): %v", insight.UserID, insight.InsightID, err)
-			errs = append(errs, err)
+			log.Printf("notify_insight: send to device (user=%s insight=%s): %v", insight.UserID, insight.InsightID, sendErr)
+			errs = append(errs, sendErr)
 		}
+		uc.recordHistory(ctx, insight, title, sendErr)
 	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("notify insight %s: %w", insight.InsightID, errors.Join(errs...))
 	}
 	return nil
+}
+
+// recordHistory persiste um registro de histórico do envio (sent/failed). Uma
+// falha de escrita NÃO aborta a entrega: apenas loga. No-op quando history nil.
+func (uc *NotifyInsight) recordHistory(ctx context.Context, insight InsightGenerated, title string, sendErr error) {
+	if uc.history == nil {
+		return
+	}
+	rec := port.NotificationRecord{
+		UserID:    insight.UserID,
+		InsightID: insight.InsightID,
+		Type:      insight.Type,
+		Severity:  insight.Severity,
+		Title:     title,
+		Body:      insight.Message,
+		Status:    port.NotificationStatusSent,
+	}
+	if sendErr != nil {
+		rec.Status = port.NotificationStatusFailed
+		rec.Error = sendErr.Error()
+	}
+	if err := uc.history.Save(ctx, rec); err != nil {
+		log.Printf("notify_insight: persist history (user=%s insight=%s): %v", insight.UserID, insight.InsightID, err)
+	}
 }
 
 // insightTitle deriva um título curto a partir do tipo/severidade do insight.

@@ -29,6 +29,7 @@ func NewRouter(
 	insightHandler *handler.InsightHandler,
 	stravaHandler *handler.StravaHandler,
 	deviceHandler *handler.DeviceHandler,
+	notificationHandler *handler.NotificationHandler,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit:    1 << 20, // 1 MiB
@@ -68,6 +69,9 @@ func NewRouter(
 
 	// Registro de dispositivos para notificações push do usuário autenticado.
 	protected.Post("/notifications/devices", deviceHandler.Register)
+
+	// Histórico de notificações do usuário autenticado.
+	protected.Get("/notifications", notificationHandler.List)
 
 	// Conexão e sync exigem usuário autenticado.
 	protected.Get("/connectors/strava/connect", stravaHandler.Connect)

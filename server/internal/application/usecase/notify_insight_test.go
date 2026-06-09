@@ -53,6 +53,36 @@ func (n *fakeNotifier) Send(_ context.Context, notif port.Notification) error {
 	return nil
 }
 
+// fakeNotificationRepo captura os registros de histórico persistidos.
+type fakeNotificationRepo struct {
+	saved   []port.NotificationRecord
+	saveErr error
+}
+
+func (r *fakeNotificationRepo) Save(_ context.Context, record port.NotificationRecord) error {
+	if r.saveErr != nil {
+		return r.saveErr
+	}
+	r.saved = append(r.saved, record)
+	return nil
+}
+
+func (r *fakeNotificationRepo) ListByUser(_ context.Context, userID string, limit int) ([]port.NotificationRecord, error) {
+	if r.saveErr != nil {
+		return nil, r.saveErr
+	}
+	var out []port.NotificationRecord
+	for _, rec := range r.saved {
+		if rec.UserID == userID {
+			out = append(out, rec)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func sampleInsight() usecase.InsightGenerated {
 	return usecase.InsightGenerated{
 		UserID:    "u1",
@@ -144,7 +174,89 @@ func TestNotifyInsight_RepoError_Propagates(t *testing.T) {
 	}
 }
 
+// TestNotifyInsight_PersistsHistory_SentAndFailed garante que cada tentativa de
+// envio gera um registro de histórico com o status correto (sent/failed).
+func TestNotifyInsight_PersistsHistory_SentAndFailed(t *testing.T) {
+	repo := &fakeDeviceRepo{byUser: map[string][]port.Device{
+		"u1": {
+			{UserID: "u1", Token: "tok-a"},
+			{UserID: "u1", Token: "tok-bad"},
+		},
+	}}
+	notifier := &fakeNotifier{failFor: map[string]error{"tok-bad": errors.New("push rejected")}}
+	history := &fakeNotificationRepo{}
+	uc := usecase.NewNotifyInsight(repo, notifier).WithHistory(history)
+
+	err := uc.Execute(context.Background(), sampleInsight())
+	if err == nil {
+		t.Fatal("expected aggregated error when a device send fails")
+	}
+
+	if len(history.saved) != 2 {
+		t.Fatalf("persisted %d history records, want 2", len(history.saved))
+	}
+
+	var sent, failed int
+	for _, rec := range history.saved {
+		if rec.UserID != "u1" || rec.InsightID != "ins-1" {
+			t.Errorf("record = %+v, want user u1 insight ins-1", rec)
+		}
+		switch rec.Status {
+		case port.NotificationStatusSent:
+			sent++
+			if rec.Error != "" {
+				t.Errorf("sent record should have empty error, got %q", rec.Error)
+			}
+		case port.NotificationStatusFailed:
+			failed++
+			if rec.Error == "" {
+				t.Error("failed record should carry an error message")
+			}
+		default:
+			t.Errorf("unexpected status %q", rec.Status)
+		}
+	}
+	if sent != 1 || failed != 1 {
+		t.Errorf("sent=%d failed=%d, want 1 and 1", sent, failed)
+	}
+}
+
+// TestNotifyInsight_HistoryWriteError_DoesNotAbortDelivery garante que uma falha
+// ao persistir o histórico não interrompe nem altera o resultado da entrega.
+func TestNotifyInsight_HistoryWriteError_DoesNotAbortDelivery(t *testing.T) {
+	repo := &fakeDeviceRepo{byUser: map[string][]port.Device{
+		"u1": {{UserID: "u1", Token: "tok-a"}},
+	}}
+	notifier := &fakeNotifier{}
+	history := &fakeNotificationRepo{saveErr: errors.New("history db down")}
+	uc := usecase.NewNotifyInsight(repo, notifier).WithHistory(history)
+
+	if err := uc.Execute(context.Background(), sampleInsight()); err != nil {
+		t.Fatalf("history write error must not abort delivery: %v", err)
+	}
+	if len(notifier.sent) != 1 {
+		t.Fatalf("sent %d notifications, want 1", len(notifier.sent))
+	}
+}
+
+// TestNotifyInsight_NilHistory_IsNoop garante que a use case opera sem histórico.
+func TestNotifyInsight_NilHistory_IsNoop(t *testing.T) {
+	repo := &fakeDeviceRepo{byUser: map[string][]port.Device{
+		"u1": {{UserID: "u1", Token: "tok-a"}},
+	}}
+	notifier := &fakeNotifier{}
+	uc := usecase.NewNotifyInsight(repo, notifier) // sem WithHistory
+
+	if err := uc.Execute(context.Background(), sampleInsight()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(notifier.sent) != 1 {
+		t.Fatalf("sent %d notifications, want 1", len(notifier.sent))
+	}
+}
+
 var (
-	_ port.DeviceRepository = (*fakeDeviceRepo)(nil)
-	_ port.Notifier         = (*fakeNotifier)(nil)
+	_ port.DeviceRepository       = (*fakeDeviceRepo)(nil)
+	_ port.Notifier               = (*fakeNotifier)(nil)
+	_ port.NotificationRepository = (*fakeNotificationRepo)(nil)
 )

@@ -10,24 +10,28 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `toml:"server"`
-	Database  DatabaseConfig  `toml:"database"`
-	Auth      AuthConfig      `toml:"auth"`
+	Server        ServerConfig        `toml:"server"`
+	Database      DatabaseConfig      `toml:"database"`
+	Auth          AuthConfig          `toml:"auth"`
 	Messaging     MessagingConfig     `toml:"messaging"`
 	Redis         RedisConfig         `toml:"redis"`
 	Connectors    ConnectorsConfig    `toml:"connectors"`
 	Notifications NotificationsConfig `toml:"notifications"`
 }
 
-// NotificationsConfig carrega a configuração do provedor de push. Quando
-// ServerKey está vazia, a wiring usa o LogNotifier (stub seguro, sem rede).
+// NotificationsConfig carrega a configuração do provedor de push (FCM HTTP v1).
+// Quando credenciais/projeto estão vazios, a wiring usa o LogNotifier (stub
+// seguro, sem rede).
 type NotificationsConfig struct {
 	// Provider seleciona o adaptador de push: "fcm" ou "log" (padrão "log").
 	Provider string `toml:"provider"`
-	// FCMBaseURL sobrescreve o endpoint de envio do FCM (vazio = endpoint real).
+	// FCMBaseURL sobrescreve o endpoint base do FCM (vazio = endpoint real).
 	FCMBaseURL string `toml:"fcm_base_url"`
-	// FCMServerKey é a chave de servidor do FCM. Vazia => cai no LogNotifier.
-	FCMServerKey string `toml:"fcm_server_key"`
+	// FCMCredentialsFile é o caminho do JSON da service-account do Firebase.
+	// Vazio => cai no LogNotifier.
+	FCMCredentialsFile string `toml:"fcm_credentials_file"`
+	// FCMProjectID é o ID do projeto Firebase/GCP. Vazio => cai no LogNotifier.
+	FCMProjectID string `toml:"fcm_project_id"`
 }
 
 // ConnectorsConfig agrupa a configuração dos conectores de provedores externos.
@@ -169,9 +173,10 @@ func defaults() *Config {
 			},
 		},
 		Notifications: NotificationsConfig{
-			Provider:     "log",
-			FCMBaseURL:   "",
-			FCMServerKey: "",
+			Provider:           "log",
+			FCMBaseURL:         "",
+			FCMCredentialsFile: "",
+			FCMProjectID:       "",
 		},
 	}
 }
@@ -303,7 +308,10 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("FCM_BASE_URL"); v != "" {
 		cfg.Notifications.FCMBaseURL = v
 	}
-	if v := os.Getenv("FCM_SERVER_KEY"); v != "" {
-		cfg.Notifications.FCMServerKey = v
+	if v := os.Getenv("FCM_CREDENTIALS_FILE"); v != "" {
+		cfg.Notifications.FCMCredentialsFile = v
+	}
+	if v := os.Getenv("FCM_PROJECT_ID"); v != "" {
+		cfg.Notifications.FCMProjectID = v
 	}
 }

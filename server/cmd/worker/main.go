@@ -100,6 +100,7 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 	insightRepo := postgres.NewInsightRepository(db)
 	aggRepo := postgres.NewAggregatedMetricRepository(db)
 	deviceRepo := postgres.NewDeviceRepository(db)
+	notificationRepo := postgres.NewNotificationRepository(db)
 	providerTokenRepo := postgres.NewProviderTokenRepository(db)
 
 	evaluator := deterministic.NewCompositeEvaluator(
@@ -122,7 +123,7 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 	// dispositivos do usuário. Usa o FCMNotifier quando há server key
 	// configurada; caso contrário cai no LogNotifier (stub seguro, sem rede).
 	notifier := buildNotifier(notifyCfg)
-	notifyInsight := usecase.NewNotifyInsight(deviceRepo, notifier)
+	notifyInsight := usecase.NewNotifyInsight(deviceRepo, notifier).WithHistory(notificationRepo)
 	subscriber.Register(notifications.NewInsightNotificationHandler(notifyInsight))
 
 	// Conector Strava: consome strava.webhook.activity, resolve o atleta -> GAH
@@ -141,14 +142,21 @@ func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher por
 }
 
 // buildNotifier escolhe o adaptador de push conforme a config: FCMNotifier
-// quando provider="fcm" e há server key; caso contrário o LogNotifier (stub
-// seguro, sem chamada externa).
+// (HTTP v1) quando provider="fcm" e há credentials file + project id; caso
+// contrário o LogNotifier (stub seguro, sem chamada externa). Falha ao montar o
+// token source da service-account também cai no LogNotifier.
 func buildNotifier(cfg config.NotificationsConfig) port.Notifier {
-	if cfg.Provider == "fcm" && cfg.FCMServerKey != "" {
-		log.Println("notifications: using FCM push notifier")
+	if cfg.Provider == "fcm" && cfg.FCMCredentialsFile != "" && cfg.FCMProjectID != "" {
+		ts, err := notifications.NewServiceAccountTokenSource(context.Background(), cfg.FCMCredentialsFile)
+		if err != nil {
+			log.Printf("notifications: failed to load FCM credentials (%v); falling back to log notifier", err)
+			return notifications.NewLogNotifier()
+		}
+		log.Println("notifications: using FCM HTTP v1 push notifier")
 		return notifications.NewFCMNotifier(notifications.FCMConfig{
-			BaseURL:   cfg.FCMBaseURL,
-			ServerKey: cfg.FCMServerKey,
+			BaseURL:     cfg.FCMBaseURL,
+			ProjectID:   cfg.FCMProjectID,
+			TokenSource: ts,
 		})
 	}
 	log.Println("notifications: using log notifier (no push provider configured)")

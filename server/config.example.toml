@@ -53,10 +53,13 @@ webhook_verify_token = "change-me-webhook-token"
 # api_base_url = "https://www.strava.com"
 
 [notifications]
-# Provedor de push: "fcm" ou "log". Sobrescreva via NOTIFICATIONS_PROVIDER.
-# Se fcm_server_key estiver vazia, a wiring usa o LogNotifier (stub seguro).
+# Provedor de push: "fcm" (FCM HTTP v1) ou "log". Sobrescreva via NOTIFICATIONS_PROVIDER.
+# Se fcm_credentials_file ou fcm_project_id estiverem vazios, a wiring usa o
+# LogNotifier (stub seguro, sem rede).
 provider = "log"
-# Endpoint de envio do FCM (vazio = endpoint real). Sobrescreva via FCM_BASE_URL.
+# Endpoint base do FCM (vazio = endpoint real). Sobrescreva via FCM_BASE_URL.
 fcm_base_url = ""
-# Chave de servidor do FCM. Sobrescreva via FCM_SERVER_KEY.
-fcm_server_key = ""
+# Caminho do JSON da service-account do Firebase. Sobrescreva via FCM_CREDENTIALS_FILE.
+fcm_credentials_file = ""
+# ID do projeto Firebase/GCP. Sobrescreva via FCM_PROJECT_ID.
+fcm_project_id = ""

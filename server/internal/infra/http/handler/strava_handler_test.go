@@ -52,7 +52,9 @@ type fakeTokenRepo struct {
 	tokens map[string]*port.ProviderToken
 }
 
-func newFakeTokenRepo() *fakeTokenRepo { return &fakeTokenRepo{tokens: make(map[string]*port.ProviderToken)} }
+func newFakeTokenRepo() *fakeTokenRepo {
+	return &fakeTokenRepo{tokens: make(map[string]*port.ProviderToken)}
+}
 
 func (r *fakeTokenRepo) Save(_ context.Context, userID string, token port.ProviderToken) error {
 	t := token
