@@ -1,23 +1,27 @@
 // Command worker é o consumidor de eventos assíncronos do GAH. Ele conecta ao
 // RabbitMQ, registra os handlers de eventos e processa as mensagens publicadas
-// pela API (via port.EventPublisher) até receber SIGINT/SIGTERM.
+// pela API/conectores (via port.EventPublisher) até receber SIGINT/SIGTERM.
 //
-// Hoje registra apenas um handler de log como placeholder, para que o worker
-// seja executável. Módulos futuros (processamento de métricas, geração de
-// insights, notificações) registram seus handlers aqui — ver comentário em
-// registerHandlers.
+// Hoje hospeda o módulo de Processamento: consome raw.activity.imported e roda
+// o pipeline (validação -> dedup -> normalização -> persistência -> agregação
+// -> insights), publicando insight.generated para o módulo de Notificações.
 package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/application/usecase"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/config"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/insights/deterministic"
 	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/messaging/rabbitmq"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/persistence/postgres"
+	"github.com/Growth-Athlete-Hub/gah-server/internal/infra/processing"
 )
 
 func main() {
@@ -26,6 +30,24 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	db, err := postgres.NewDB(cfg.Database.URL)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime.Duration)
+
+	// O worker publica eventos derivados (ex.: insight.generated), reusando o
+	// mesmo topic exchange da API.
+	publisher, err := rabbitmq.NewPublisher(cfg.Messaging.URL, cfg.Messaging.Exchange)
+	if err != nil {
+		log.Fatalf("failed to connect to rabbitmq (publisher): %v", err)
+	}
+	defer publisher.Close()
+
 	subscriber, err := rabbitmq.NewSubscriber(
 		cfg.Messaging.URL,
 		cfg.Messaging.Exchange,
@@ -33,11 +55,11 @@ func main() {
 		cfg.Messaging.Prefetch,
 	)
 	if err != nil {
-		log.Fatalf("failed to connect to rabbitmq: %v", err)
+		log.Fatalf("failed to connect to rabbitmq (subscriber): %v", err)
 	}
 	defer subscriber.Close()
 
-	registerHandlers(subscriber)
+	registerHandlers(subscriber, db, publisher)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -58,21 +80,37 @@ func main() {
 	log.Println("worker stopped")
 }
 
-// registerHandlers registra os handlers de eventos no subscriber.
+// registerHandlers monta as use cases do pipeline de processamento e registra
+// seus handlers no subscriber.
 //
-// Por enquanto há apenas um handler de log (placeholder) para os eventos já
-// emitidos pela API. Quando os módulos de processamento/notificação existirem,
-// registre seus handlers aqui, por exemplo:
-//
-//	subscriber.Register(processing.NewMetricRecordedHandler(...))
-//	subscriber.RegisterFunc("activity.registered", notif.OnActivity)
-func registerHandlers(subscriber *rabbitmq.Subscriber) {
-	logHandler := func(_ context.Context, event port.Event) error {
-		log.Printf("event received: type=%s payload=%v", event.Type, event.Payload)
-		return nil
-	}
+// O módulo de Processamento reusa RegisterActivity (persistência + dedup por
+// external_id) e GenerateInsights, e roda a agregação diária — exatamente as
+// use cases da API, evitando duplicação de lógica.
+func registerHandlers(subscriber *rabbitmq.Subscriber, db *sql.DB, publisher port.EventPublisher) {
+	activityRepo := postgres.NewActivityRepository(db)
+	metricRepo := postgres.NewMetricRepository(db)
+	insightRepo := postgres.NewInsightRepository(db)
+	aggRepo := postgres.NewAggregatedMetricRepository(db)
 
-	subscriber.RegisterFunc("activity.registered", logHandler)
-	subscriber.RegisterFunc("metric.recorded", logHandler)
-	subscriber.RegisterFunc("user.registered", logHandler)
+	evaluator := deterministic.NewCompositeEvaluator(
+		deterministic.NewHRVRule(),
+		deterministic.NewRestingHRRule(),
+		deterministic.NewSleepRule(),
+		deterministic.NewACWRRule(),
+		deterministic.NewRecoveryRule(),
+	)
+
+	registerActivity := usecase.NewRegisterActivity(activityRepo, publisher)
+	generateInsights := usecase.NewGenerateInsights(metricRepo, insightRepo, evaluator)
+	aggregateDaily := usecase.NewAggregateDailyMetrics(metricRepo, aggRepo)
+
+	processRaw := usecase.NewProcessRawActivity(registerActivity, generateInsights, aggregateDaily, publisher)
+
+	subscriber.Register(processing.NewRawActivityHandler(processRaw))
+
+	// TODO: strava.webhook.activity é apenas um gatilho (athlete/object IDs); o
+	// seu handler precisaria do SyncProviderActivities (gateway + token repo)
+	// para buscar a atividade e republicar raw.activity.imported. Quando o
+	// worker tiver acesso ao gateway/token repo, registre-o aqui. Por ora, o
+	// fluxo de sync é disparado pela API (StravaHandler).
 }
