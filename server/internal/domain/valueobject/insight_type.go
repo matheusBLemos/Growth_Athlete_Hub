@@ -24,9 +24,13 @@ var validInsightTypes = map[InsightType]bool{
 	InsightTypeRecoveryNeeded: true,
 }
 
+func (it InsightType) IsValid() bool {
+	return validInsightTypes[it]
+}
+
 func NewInsightType(s string) (InsightType, error) {
 	it := InsightType(s)
-	if !validInsightTypes[it] {
+	if !it.IsValid() {
 		return "", ErrInvalidInsightType
 	}
 	return it, nil

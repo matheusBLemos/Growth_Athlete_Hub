@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -59,10 +60,12 @@ func (uc *RegisterActivity) Execute(ctx context.Context, input RegisterActivityI
 		return nil, err
 	}
 
-	_ = uc.publisher.Publish(ctx, port.Event{
+	if err := uc.publisher.Publish(ctx, port.Event{
 		Type:    "activity.registered",
 		Payload: activity,
-	})
+	}); err != nil {
+		log.Printf("failed to publish activity.registered event: %v", err)
+	}
 
 	return &RegisterActivityOutput{ID: activity.ID}, nil
 }

@@ -16,11 +16,15 @@ type User struct {
 }
 
 func NewUser(name, email string, birthDate time.Time) (*User, error) {
-	if strings.TrimSpace(name) == "" {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		return nil, ErrEmptyName
 	}
 	if !isValidEmail(email) {
 		return nil, ErrInvalidEmail
+	}
+	if birthDate.IsZero() {
+		return nil, ErrBirthDateFuture
 	}
 	if birthDate.After(time.Now()) {
 		return nil, ErrBirthDateFuture
@@ -29,7 +33,7 @@ func NewUser(name, email string, birthDate time.Time) (*User, error) {
 	return &User{
 		ID:        generateID(),
 		Name:      name,
-		Email:     email,
+		Email:     strings.ToLower(strings.TrimSpace(email)),
 		BirthDate: birthDate,
 		CreatedAt: time.Now(),
 	}, nil
@@ -55,6 +59,8 @@ func isValidEmail(email string) bool {
 
 func generateID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return fmt.Sprintf("%x", b)
 }

@@ -33,7 +33,8 @@ func (r *MetricRepository) FindByUserIDAndType(ctx context.Context, userID strin
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, user_id, type, value, date, created_at
 		 FROM metrics WHERE user_id = $1 AND type = $2 AND date >= $3 AND date <= $4
-		 ORDER BY date ASC`,
+		 ORDER BY date ASC
+		 LIMIT 1000`,
 		userID, string(metricType), from, to,
 	)
 	if err != nil {
@@ -45,6 +46,9 @@ func (r *MetricRepository) FindByUserIDAndType(ctx context.Context, userID strin
 }
 
 func (r *MetricRepository) FindLatestByUserIDAndType(ctx context.Context, userID string, metricType valueobject.MetricType, limit int) ([]*entity.Metric, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, user_id, type, value, date, created_at
 		 FROM metrics WHERE user_id = $1 AND type = $2

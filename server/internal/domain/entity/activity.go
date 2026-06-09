@@ -21,6 +21,9 @@ func NewActivity(userID string, activityType valueobject.ActivityType, date time
 	if userID == "" {
 		return nil, ErrEmptyUserID
 	}
+	if !activityType.IsValid() {
+		return nil, valueobject.ErrInvalidActivityType
+	}
 	if duration <= 0 {
 		return nil, ErrInvalidDuration
 	}

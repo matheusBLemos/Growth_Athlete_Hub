@@ -30,9 +30,13 @@ var validMetricTypes = map[MetricType]bool{
 	MetricTypeTrainingLoad:  true,
 }
 
+func (mt MetricType) IsValid() bool {
+	return validMetricTypes[mt]
+}
+
 func NewMetricType(s string) (MetricType, error) {
 	mt := MetricType(s)
-	if !validMetricTypes[mt] {
+	if !mt.IsValid() {
 		return "", ErrInvalidMetricType
 	}
 	return mt, nil

@@ -28,9 +28,13 @@ var validActivityTypes = map[ActivityType]bool{
 	ActivityTypeOther:         true,
 }
 
+func (at ActivityType) IsValid() bool {
+	return validActivityTypes[at]
+}
+
 func NewActivityType(s string) (ActivityType, error) {
 	at := ActivityType(s)
-	if !validActivityTypes[at] {
+	if !at.IsValid() {
 		return "", ErrInvalidActivityType
 	}
 	return at, nil

@@ -59,7 +59,8 @@ func (r *InsightRepository) FindByUserID(ctx context.Context, userID string, fro
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, user_id, type, severity, message, date, created_at
 		 FROM insights WHERE user_id = $1 AND date >= $2 AND date <= $3
-		 ORDER BY date DESC`,
+		 ORDER BY date DESC
+		 LIMIT 1000`,
 		userID, from, to,
 	)
 	if err != nil {

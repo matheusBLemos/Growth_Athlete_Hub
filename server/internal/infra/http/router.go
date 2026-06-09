@@ -18,7 +18,6 @@ func NewRouter(
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.SetHeader("Content-Type", "application/json"))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/activities", activityHandler.Register)
@@ -30,6 +29,7 @@ func NewRouter(
 	})
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 

@@ -22,7 +22,7 @@ func (r *UserRepository) Save(ctx context.Context, user *entity.User) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO users (id, name, email, birth_date, created_at)
 		 VALUES ($1, $2, $3, $4, $5)
-		 ON CONFLICT (id) DO UPDATE SET name = $2, email = $3`,
+		 ON CONFLICT (id) DO UPDATE SET name = $2, email = $3, birth_date = $4`,
 		user.ID, user.Name, user.Email, user.BirthDate, user.CreatedAt,
 	)
 	return err

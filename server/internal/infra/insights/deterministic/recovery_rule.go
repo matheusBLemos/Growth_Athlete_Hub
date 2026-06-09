@@ -16,23 +16,32 @@ func NewRecoveryRule() *RecoveryRule {
 	return &RecoveryRule{}
 }
 
-func (r *RecoveryRule) Evaluate(_ context.Context, userID string, metrics []*entity.Metric) ([]*entity.Insight, error) {
+func (r *RecoveryRule) Evaluate(ctx context.Context, userID string, metrics []*entity.Metric) ([]*entity.Insight, error) {
 	signals := 0
 
 	hrvRule := NewHRVRule()
-	hrvInsights, _ := hrvRule.Evaluate(context.Background(), userID, metrics)
+	hrvInsights, err := hrvRule.Evaluate(ctx, userID, metrics)
+	if err != nil {
+		return nil, err
+	}
 	if len(hrvInsights) > 0 {
 		signals++
 	}
 
 	sleepRule := NewSleepRule()
-	sleepInsights, _ := sleepRule.Evaluate(context.Background(), userID, metrics)
+	sleepInsights, err := sleepRule.Evaluate(ctx, userID, metrics)
+	if err != nil {
+		return nil, err
+	}
 	if len(sleepInsights) > 0 {
 		signals++
 	}
 
 	restingHRRule := NewRestingHRRule()
-	restingHRInsights, _ := restingHRRule.Evaluate(context.Background(), userID, metrics)
+	restingHRInsights, err := restingHRRule.Evaluate(ctx, userID, metrics)
+	if err != nil {
+		return nil, err
+	}
 	if len(restingHRInsights) > 0 {
 		signals++
 	}

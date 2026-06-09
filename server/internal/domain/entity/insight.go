@@ -20,6 +20,12 @@ func NewInsight(userID string, insightType valueobject.InsightType, severity val
 	if userID == "" {
 		return nil, ErrEmptyUserID
 	}
+	if !insightType.IsValid() {
+		return nil, valueobject.ErrInvalidInsightType
+	}
+	if !severity.IsValid() {
+		return nil, valueobject.ErrInvalidSeverity
+	}
 	if message == "" {
 		return nil, ErrEmptyMessage
 	}

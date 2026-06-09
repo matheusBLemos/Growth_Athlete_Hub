@@ -34,6 +34,9 @@ func NewMetric(userID string, metricType valueobject.MetricType, value float64, 
 	if date.IsZero() {
 		return nil, ErrEmptyDate
 	}
+	if !metricType.IsValid() {
+		return nil, valueobject.ErrInvalidMetricType
+	}
 	if r, ok := metricRanges[metricType]; ok {
 		if value < r[0] || value > r[1] {
 			return nil, ErrMetricOutOfRange

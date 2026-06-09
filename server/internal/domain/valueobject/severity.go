@@ -18,9 +18,13 @@ var validSeverities = map[Severity]bool{
 	SeverityCritical: true,
 }
 
+func (sev Severity) IsValid() bool {
+	return validSeverities[sev]
+}
+
 func NewSeverity(s string) (Severity, error) {
 	sev := Severity(s)
-	if !validSeverities[sev] {
+	if !sev.IsValid() {
 		return "", ErrInvalidSeverity
 	}
 	return sev, nil

@@ -41,7 +41,8 @@ func (r *ActivityRepository) FindByUserID(ctx context.Context, userID string, fr
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, user_id, type, date, duration_ns, avg_heart_rate, COALESCE(external_id, ''), created_at
 		 FROM activities WHERE user_id = $1 AND date >= $2 AND date <= $3
-		 ORDER BY date DESC`,
+		 ORDER BY date DESC
+		 LIMIT 1000`,
 		userID, from, to,
 	)
 	if err != nil {

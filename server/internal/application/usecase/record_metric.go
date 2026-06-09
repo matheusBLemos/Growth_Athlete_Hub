@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/Growth-Athlete-Hub/gah-server/internal/application/port"
@@ -47,10 +48,12 @@ func (uc *RecordMetric) Execute(ctx context.Context, input RecordMetricInput) (*
 		return nil, err
 	}
 
-	_ = uc.publisher.Publish(ctx, port.Event{
+	if err := uc.publisher.Publish(ctx, port.Event{
 		Type:    "metric.recorded",
 		Payload: metric,
-	})
+	}); err != nil {
+		log.Printf("failed to publish metric.recorded event: %v", err)
+	}
 
 	return &RecordMetricOutput{ID: metric.ID}, nil
 }
