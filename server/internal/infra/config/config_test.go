@@ -33,6 +33,75 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Auth.TokenTTL.Duration != 24*time.Hour {
 		t.Errorf("token_ttl = %v, want 24h", cfg.Auth.TokenTTL)
 	}
+	if cfg.Messaging.URL != "amqp://gah:gah@localhost:5672/" {
+		t.Errorf("messaging url = %q, want default", cfg.Messaging.URL)
+	}
+	if cfg.Messaging.Exchange != "gah.events" {
+		t.Errorf("messaging exchange = %q, want gah.events", cfg.Messaging.Exchange)
+	}
+	if cfg.Messaging.QueuePrefix != "gah" {
+		t.Errorf("messaging queue_prefix = %q, want gah", cfg.Messaging.QueuePrefix)
+	}
+	if cfg.Messaging.Prefetch != 10 {
+		t.Errorf("messaging prefetch = %d, want 10", cfg.Messaging.Prefetch)
+	}
+}
+
+func TestLoad_MessagingFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[messaging]
+url = "amqp://user:pass@broker:5672/"
+exchange = "custom.events"
+queue_prefix = "custom"
+prefetch = 42
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Messaging.URL != "amqp://user:pass@broker:5672/" {
+		t.Errorf("messaging url = %q, want toml value", cfg.Messaging.URL)
+	}
+	if cfg.Messaging.Exchange != "custom.events" {
+		t.Errorf("messaging exchange = %q, want custom.events", cfg.Messaging.Exchange)
+	}
+	if cfg.Messaging.QueuePrefix != "custom" {
+		t.Errorf("messaging queue_prefix = %q, want custom", cfg.Messaging.QueuePrefix)
+	}
+	if cfg.Messaging.Prefetch != 42 {
+		t.Errorf("messaging prefetch = %d, want 42", cfg.Messaging.Prefetch)
+	}
+}
+
+func TestLoad_MessagingEnvOverrides(t *testing.T) {
+	t.Setenv("RABBITMQ_URL", "amqp://env:env@envhost:5672/")
+	t.Setenv("RABBITMQ_EXCHANGE", "env.events")
+	t.Setenv("RABBITMQ_QUEUE_PREFIX", "envprefix")
+	t.Setenv("RABBITMQ_PREFETCH", "5")
+
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Messaging.URL != "amqp://env:env@envhost:5672/" {
+		t.Errorf("messaging url = %q, want env override", cfg.Messaging.URL)
+	}
+	if cfg.Messaging.Exchange != "env.events" {
+		t.Errorf("messaging exchange = %q, want env.events", cfg.Messaging.Exchange)
+	}
+	if cfg.Messaging.QueuePrefix != "envprefix" {
+		t.Errorf("messaging queue_prefix = %q, want envprefix", cfg.Messaging.QueuePrefix)
+	}
+	if cfg.Messaging.Prefetch != 5 {
+		t.Errorf("messaging prefetch = %d, want 5", cfg.Messaging.Prefetch)
+	}
 }
 
 func TestLoad_AuthFromTOML(t *testing.T) {

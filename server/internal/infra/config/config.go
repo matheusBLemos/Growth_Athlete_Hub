@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `toml:"server"`
-	Database DatabaseConfig `toml:"database"`
-	Auth     AuthConfig     `toml:"auth"`
+	Server    ServerConfig    `toml:"server"`
+	Database  DatabaseConfig  `toml:"database"`
+	Auth      AuthConfig      `toml:"auth"`
+	Messaging MessagingConfig `toml:"messaging"`
 }
 
 type ServerConfig struct {
@@ -29,6 +30,18 @@ type AuthConfig struct {
 	TokenTTL Duration `toml:"token_ttl"`
 	// PasswordPepper é um segredo da aplicação aplicado ao hash Argon2id da senha.
 	PasswordPepper string `toml:"password_pepper"`
+}
+
+type MessagingConfig struct {
+	// URL é a connection string AMQP do RabbitMQ. Sobrescreva via RABBITMQ_URL.
+	URL string `toml:"url"`
+	// Exchange é o nome do topic exchange onde os eventos são publicados.
+	Exchange string `toml:"exchange"`
+	// QueuePrefix prefixa o nome das filas declaradas pelos consumidores
+	// (ex.: "gah" -> "gah.activity.registered").
+	QueuePrefix string `toml:"queue_prefix"`
+	// Prefetch é o limite de mensagens não confirmadas por consumidor (QoS).
+	Prefetch int `toml:"prefetch"`
 }
 
 type DatabaseConfig struct {
@@ -86,6 +99,12 @@ func defaults() *Config {
 			JWTSecret:      "change-me-in-production",
 			TokenTTL:       Duration{24 * time.Hour},
 			PasswordPepper: "",
+		},
+		Messaging: MessagingConfig{
+			URL:         "amqp://gah:gah@localhost:5672/",
+			Exchange:    "gah.events",
+			QueuePrefix: "gah",
+			Prefetch:    10,
 		},
 	}
 }
@@ -149,5 +168,23 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("AUTH_PASSWORD_PEPPER"); v != "" {
 		cfg.Auth.PasswordPepper = v
+	}
+
+	if v := os.Getenv("RABBITMQ_URL"); v != "" {
+		cfg.Messaging.URL = v
+	}
+
+	if v := os.Getenv("RABBITMQ_EXCHANGE"); v != "" {
+		cfg.Messaging.Exchange = v
+	}
+
+	if v := os.Getenv("RABBITMQ_QUEUE_PREFIX"); v != "" {
+		cfg.Messaging.QueuePrefix = v
+	}
+
+	if v := os.Getenv("RABBITMQ_PREFETCH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Messaging.Prefetch = n
+		}
 	}
 }
